@@ -20,18 +20,144 @@ pragma solidity 0.8.18; // like always
 contract ThisIsAnExample {/* contract logic goes here */} 
 ```
 
+
+### Layout of Solidity Files/Contracts:
+
+Solidty files should be ordered correctly:
+ 1. solidity version
+ 2. imports
+ 3. errors
+ 4. interfaces
+ 5. libraries
+ 6. contracts
+ 7. Type declarations
+ 8. State variables
+ 9. Events
+ 10. Modifiers
+ 11. Functions
+
+Layout of Functions:
+ 1. constructor
+ 2. receive function (if exists)
+ 3. fallback function (if exists)
+ 4. external
+ 5. public
+ 6. internal
+ 7. private
+ 8. internal & private view & pure functions
+ 9. external & public view & pure functions
+
+
+
+
+### Visibility Modifiers:
+
+There are 4 types of visibility modifiers in solidity. Public, Private, External, Internal.
+
+1. Public:
+Accessible from anywhere (inside contract, other contracts, and externally)
+Automatically creates a getter function for state variables
+Most permissive modifier
+Example:
+```javascript
+contract Example {
+    uint public myNumber; // Creates automatic getter
+    
+    function publicFunction() public {
+        // Can be called from anywhere
+    }
+}
+```
+
+2. Private: 
+Only accessible within the contract where it's defined
+Cannot be accessed from derived contracts or externally
+Most restrictive modifier
+Private variables are still visible on the blockchain
+Needs a Getter Function to be used/called outside the contract where it's defined.
+Example:
+```javascript
+contract Example {
+    uint private secretNumber; // Only this contract can access
+    
+    function privateFunction() private {
+        // Only callable from within this contract
+    }
+}
+```
+
+3. Internal:
+Accessible within the current contract and contracts that inherit from it
+Cannot be accessed externally
+Default visibility for state variables
+Example:
+```javascript
+contract Base {
+    uint internal sharedNumber; // Accessible by inheriting contracts
+    
+    function internalFunction() internal {
+        // Callable from this contract and inherited contracts
+    }
+}
+
+contract Example is Base {
+    function useInternal() public {
+        internalFunction(); // Can access internal members
+        sharedNumber = 5;   // Can access internal variables
+    }
+}
+```
+
+4. External
+Only accessible from outside the contract
+Cannot be called internally (except using this.function())
+More gas efficient for large data parameters
+Only available for functions (not state variables)
+Example:
+```javascript
+contract Example {
+    function externalFunction() external {
+        // Only callable from outside
+    }
+    
+    function someFunction() public {
+        // this.externalFunction(); // Need 'this' to call external function
+    }
+}
+```
+
+*** Key points to remember: ***
+1. State Variable Default Visibility:
+- If you don't specify visibility, state variables are internal by default
+
+2. Function Default Visibility:
+- Functions without specified visibility are public by default
+- However, it's considered best practice to always explicitly declare visibility
+
+3. Visibility Access Levels (from most to least restrictive):
+    private - internal - external/public
+
+4. Gas Considerations:
+- external functions can be more gas-efficient when dealing with large arrays in memory
+- public functions create an additional JUMP in the bytecode which costs more gas
+
+5. Security Best Practices:
+- Always use the most restrictive visibility possible
+- Be explicit about visibility (don't rely on defaults)
+- Remember that private doesn't mean secret - data is still visible on the blockchain
+
 ### Variables
-The Following variable types must be saved at the contract level (not in any functions):
+The Following variable types must be declared at the contract level (not in any functions):
 
 #### Constants
 Variables that will never be updated or changed can be listed as constant. 
 For example:
 `uint8 public constant DECIMALS = 8; ` - constant veriable should be CAPITALIZED as seen in this example.
-Constant variables are directly embedded in the bytecode.
+Constant variables are directly embedded in the bytecode. This saves gas.
 
 
 #### Immutable
-Variables that are declared at the contract level but initialized in the constructor can be listed as Immutable:
+Variables that are declared at the contract level but initialized in the constructor can be listed as Immutable. This saves gas.
 For Example:
 ```javascript
 address public immutable i_owner; // As you can see immutable variables should be named with an `i_` infront of the name
@@ -53,6 +179,94 @@ For Example:
 State Variables declared at contract level by default ARE stored in storage.
 
 
+#### Saving Gas with Storage Variables
+
+If you have a storage variable or immutable variables (not constant variables), then you can save gas and make the contract more reeadable by making the storage/immutable variables `private` and making a getter function that grabs the storage variable.
+Example:
+```javascript  
+
+    // an array of addresses called funders.
+    address[] private s_funders;
+
+    // a mapping, mapping the addresses and their amount funded.
+    // the names "funder" and "amountFunded" is "syntaxic sugar", just makes it easier to read
+    mapping(address funder => uint256 amountFunded) private s_addressToAmountFunded;
+
+    // to be used in constructor
+    address private immutable i_owner; // variables defined in the constructor, can be marked as immutable if they will not change. This will save gas
+    // immutable varibles should use "i_" in their name
+
+  /**
+     * View / Pure Functions (These are going to be our Getters)
+     * Below are our Getter functions. by making storage variables private, they save more gas. Then by making view/pure functions to get the data within the private storage functions, it also makes the code much more readable.
+     * These are called getter functions because all they do is read and return private data from the contracts storage without modifying the contract state.
+     */
+
+    // This function allows anyone to check how much eth a specific address has funded to the contract.
+    function getAddressToAmountFunded(address fundingAddress) external view returns (uint256) {
+        // takes the fundingAddress parameter that users input and reads and returns the amount that that address has funded. It is accessing the mapping of s_addressToAmountFunded which stores the funding history.
+        return s_addressToAmountFunded[fundingAddress];
+    }
+
+    //this function allows anyone to input a number(index) and they will see whos address is at that index(number).
+    function getFunder(uint256 index) external view returns (address) {
+        return s_funders[index];
+    }
+
+    function getOwner() external view returns (address) {
+        return i_owner;
+    }
+```
+
+#### Custom Error Variables
+
+Reverting with strings is not good because it costs too much gas. Instead, save the error as a custome error and revert with the custom error.
+Example:
+```javascript
+contract Raffle {
+    error Raffle__SendMoreToEnterRaffle(); // custom errors save gas
+
+    function enterRaffle() public payable {
+        // users must send more than or equal to the entranceFee or the function will revert
+        // require(msg.value >= i_entranceFee, "Not enough ETH sent!"); // this is no good because string revert messages cost TOO MUCH GAS!
+
+        // if a user sends less than the entranceFee, it will revert with the custom error
+        if (msg.value < i_entranceFee) {
+            revert Raffle__SendMoreToEnterRaffle();
+        } // this is the best way to write conditionals because they are so gas efficent.
+    }
+}
+```
+
+### Events
+When a storage variable is updated, we should always emit an event. This makes migration/version-updates of contracts much easier and events make front-end "indexing" much easier. It allows for the smart contract, front-end, and blockchain to easily know when something has been updated.
+Example:
+```javascript
+
+contract Raffle() {
+    error Raffle__SendMoreToEnterRaffle(); 
+    uint256 private immutable i_entranceFee; 
+    address payable[] private s_players; 
+
+
+/* Events */
+    // events are a way to allow the smart contract to listen for updates.
+    event RaffleEntered(address indexed player); // the player is indexed because this means 
+    // ^ the player is indexed because events are logged to the EVM. Indexed data in events are essentially the important information that can be easily queried on the blockchain. Non-Indexed data are abi-encoded and difficult to decode.
+
+    function enterRaffle() public payable {   
+        if (msg.value < i_entranceFee) {
+            revert Raffle__SendMoreToEnterRaffle();
+        } 
+
+        // when someone enters the raffle, `push` them into the array
+        s_players.push(payable(msg.sender)); // we need the payable keyword to allow the address to receive eth when they will the payout
+
+        // an event is emitted the msg.sender is added the the array/ when a user successfully calls enterRaffle()
+        emit RaffleEntered(msg.sender); // everytime we update storage, we always want to emit an event
+    }
+}
+```
 
 
 
@@ -634,7 +848,7 @@ For example:
 
 ## MAKEFILE
 
-A makefile is a way to create your own shortcuts. terminal commands in solidity can be very long, so you can essentially route your own shortcuts for terminal commands.
+A makefile is a way to create your own shortcuts. terminal commands in solidity can be very long, so you can essentially route your own shortcuts for terminal commands. Also, the `Makefile` needs to be `Makefile` and not `MakeFile` (the `f` needs to be lowercase) or `make` commands will not work.
 
 If you want to include the `.env` variables, then at the top of the MakeFile, write `--include .env`. Environment Variables must be have a $ in front of it and be wrapped in parenthesis(). Example: ` $(SEPOLIA_RPC_URL) `
 
@@ -743,3 +957,44 @@ to deploy to zksync, use `forge create`.
 There are more steps for a local zkSync test node. To find out more watch course "Foundry Fundamentals" section 1, video #29 and #30. 
 
 Will update this later!
+
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## Keyboard Shortcuts:
+
+`ctrl` + `a` = select everything
+`ctrl` + `b` = open left side bar
+`ctrl` + `c` = copy
+`ctrl` + `k`(in terminal) = clears terminal (VSCode)
+`ctrl` + `l` = open AI chat 
+`ctrl` + `n` = new tab
+`ctrl` + `s` = save file
+`ctrl` + `v` = paste
+`ctrl` + `w` = closes currently active/focused tab
+`ctrl` + `y` = redo
+`ctrl` + `z` = undo
+`ctrl` + `/` = commenting out a line
+`ctrl` + ` = toggle terminal
+`ctrl` + `shift` + `t` = reopen the last closed tab
+`ctrl` + <arrowKey> = move cursor to next word
+`ctrl` + `shift` + (←/→)<arrowKey> = select word by word
+`ctrl` + `shift` + (↑/↓)<arrowKey> = select line by line
+`alt` + (←/→)(<arrowKey>) = return to previous line in code
+`alt` + (↑/↓)<arrowKey> = move lines of code up or down
+`ctrl` + `alt` + (↑/↓)<arrowKey> = new cursor to edit many code lines simultaneously
+`crtl` + `alt` + (←/→)(<arrowKey>) = splitScreen view of code files
+`shift` + `alt` + (↑/↓)(<arrowKey>) = duplicate current line  
+`shift` + `alt` + (←/→)(<arrowKey>) = expanding or shrinking your text selection blocks
+`ctrl` + `shift` + `alt` + (←/→)(<arrowKey>) = selecting letter by letter
+`ctrl` + `shift` + `alt` + (↑/↓)(<arrowKey>) = new cursor to edit many code lines simultaneously
+`fn` + (←/→)(<arrowKey>) = beginning or end of text
+`ctrl` + `fn` + (←/→)(<arrowKey>) = beginning or end of page/file
+`ctrl` + `fn` + (↑/↓)(<arrowKey>) = switch through open tabs
+`fn` + `alt` + (↑/↓)(<arrowKey>) = scroll up or down
+`shift` + `fn` + (↑/↓)(<arrowKey>) = selects 1 page of items above or below
+`shift` + `fn` + (←/→)(<arrowKey>) = select everything on current line from cursor position.
+`ctrl` + `shift` + `fn` + (↑/↓)(<arrowKey>) = moves tab location
+`ctrl` + `shift` + `fn` + (←/→)(<arrowKey>) = selects all text to beginning or end from your cursor position.
+`ctrl` + `shift` + `alt` + `fn` + (↑/↓)(<arrowKey>) = new cursors created up to 1 page above or below
+
