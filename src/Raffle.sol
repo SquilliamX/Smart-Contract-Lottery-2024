@@ -40,7 +40,19 @@ import {VRFV2PlusClient} from
 // inheriting the Chainlink VRF
 contract Raffle is VRFConsumerBaseV2Plus {
     /* CUSTOM ERRORS */
+
     error Raffle__SendMoreToEnterRaffle(); // custom errors save gas
+    error Raffle__TransferFailed();
+    error Raffle__RaffleNotOpen();
+
+    /* Type Declarations */
+    enum RaffleState {
+        OPEN, // index 0
+        CALCULATING // index 1
+
+    }
+
+    /* State Variables */
 
     // this is a uint16 because it will be a very small number and will never change.
     uint16 private constant REQUEST_CONFIRMATIONS = 3; // // how many blocks the VRF should wait before sending us the random number
@@ -67,6 +79,12 @@ contract Raffle is VRFConsumerBaseV2Plus {
     //  the last saved block.timestamp.
     uint256 private s_lastTimeStamp;
 
+    // the payable address of the winner of the most recent lottery
+    address payable private s_recentWinner;
+
+    // The state of the raffle of type RaffleState(enum)
+    RaffleState private s_raffleState;
+
     /* Events */
     // events are a way to allow the smart contract to listen for updates.
     event RaffleEntered(address indexed player); // the player is indexed because this means
@@ -84,15 +102,18 @@ contract Raffle is VRFConsumerBaseV2Plus {
         i_entranceFee = entranceFee;
         // interval gets set in the deployment script(when the contract is being deployed).
         i_interval = interval;
-        // sets the s_lastTimeStamp variable to the current block.timestamp when deployed.
-        s_lastTimeStamp = block.timestamp;
         // keyHash to chainlink means the amount of max gas we are willing to pay. So we named it gasLane because we like gasLane as the name more
         i_keyHash = gasLane;
         // sets i_subscriptionId equal to the one set at deployment
         i_subscriptionId = subscriptionId;
-
         // Max amount of gas you are willing to spend when the VRF sends the RNG back to you
         i_callbackGasLimit = callbackGasLimit;
+
+        // sets the s_lastTimeStamp variable to the current block.timestamp when deployed.
+        s_lastTimeStamp = block.timestamp;
+
+        // when the contract is deployed it will be open
+        s_raffleState = RaffleState.OPEN; // this would be the same as s_raffleState = RaffleState.(0) since open in the enum is in index 0
     }
 
     // the payable keyword allows users to send money to this function
@@ -104,6 +125,11 @@ contract Raffle is VRFConsumerBaseV2Plus {
         if (msg.value < i_entranceFee) {
             revert Raffle__SendMoreToEnterRaffle();
         } // this is the best way to write conditionals because they are so gas efficent.
+
+        // if the raffle is not open then any transactions to enterRaffle will revert
+        if (s_raffleState != RaffleState.OPEN) {
+            revert Raffle__RaffleNotOpen();
+        }
 
         // when someone enters the raffle, `push` them into the array
         s_players.push(payable(msg.sender)); // we need the payable keyword to allow the address to receive eth when they will the payout
@@ -117,6 +143,9 @@ contract Raffle is VRFConsumerBaseV2Plus {
         if ((block.timestamp - s_lastTimeStamp) < i_interval) {
             revert();
         }
+        // when someone calls the pickWinner, users will no longer be able to join the raffle since the state of the raffle has changed to calculating and is no longer open.
+        s_raffleState = RaffleState.CALCULATING;
+
         // calling to Chainlink VRF to get a randomNumber
         uint256 requestId = s_vrfCoordinator.requestRandomWords(
             VRFV2PlusClient.RandomWordsRequest({
@@ -133,7 +162,27 @@ contract Raffle is VRFConsumerBaseV2Plus {
         );
     }
 
-    function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) internal override {}
+    function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) internal override {
+        // randomWords is 0 because we are only calling for 1 Random number from chainlink VRF and the index starts at 0, so this represets the 1 number we called for.
+        uint256 indexOfWinner = randomWords[0] % s_players.length; // this says the number that is randomly generated modulo the amount of players in the raffle
+        //  ^ modulo means the remainder of the division. So if 52(random Number) % 20(amount of people in the raffle), this will equal 12 because 12 is the remainder! So whoever is in the 12th spot will win the raffle. And this is saved into the variable indexOfWinner ^
+
+        // the remainder of the modulo equation will be identified within the s_players array and saved as the recentWinner
+        address payable recentWinner = s_players[indexOfWinner];
+
+        // update the storage variable with the recent winner
+        s_recentWinner = recentWinner;
+
+        // the state of the raffle changes to open so players can join again.
+        s_raffleState = RaffleState.OPEN;
+
+        // pay the recent winner with the whole amount of the contract
+        (bool success,) = s_recentWinner.call{value: address(this).balance}("");
+        // if not success then revert
+        if (!success) {
+            revert Raffle__TransferFailed();
+        }
+    }
 
     ////////////////////////
     /*  Getter Functions */
