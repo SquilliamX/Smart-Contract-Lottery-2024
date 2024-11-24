@@ -307,6 +307,7 @@ import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFCo
 // inheriting the Chainlink VRF
 contract Raffle is VRFConsumerBaseV2Plus {}
 ```
+After inheriting contracts, you can use variables from the parent contract in the child contract
 
 #### Inheriting Constructors
 
@@ -354,7 +355,7 @@ abstract contract VRFConsumerBaseV2Plus is IVRFMigratableConsumerV2Plus, Confirm
   }
 ```
 
-After Child Contract Inherits
+After Child Contract Inherits:
 ```js
 contract Raffle is VRFConsumerBaseV2Plus {
      uint256 private immutable i_entranceFee; 
@@ -362,7 +363,9 @@ contract Raffle is VRFConsumerBaseV2Plus {
 
     uint256 private s_lastTimeStamp;
 
-    constructor(uint256 entranceFee, uint256 interval, address vrfCoordinator) VRFConsumerBaseV2Plus(vrfCoordinator) // here we are going to define the vrfCoordinator address during this contracts deployment, and this will pass the address to the VRFConsumerBaseV2Plus constructor.
+    constructor(uint256 entranceFee, uint256 interval, address vrfCoordinator)
+    // `VRFConsumerBaseV2Plus` is the name of the contract we are inheriting from
+    VRFConsumerBaseV2Plus(vrfCoordinator) // here we are going to define the vrfCoordinator address during this contracts deployment, and this will pass the address to the VRFConsumerBaseV2Plus constructor.
     
     {
         i_entranceFee = entranceFee;
@@ -996,7 +999,11 @@ Steps:
         emit DiceRolled(requestId, roller);
     }
 ```
-3. Copy and Paste this section that we want into your code where you want to get a random number
+3. Copy and Paste this section(step 2) that we want into your code where you want to get a random number. Also copy the beginning of `function fulfillRandomWords`.
+```js
+    function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) internal override {}
+```
+
 4. This code will not work at first.  we need to import the chainlink contracts. Run `forge install smartcontractkit/chainlink-brownie-contracts@1.1.1 --no-commit`.
 5. In the Remix Example, copy and paste the `VRFConsumerBaseV2Plus` import.
 ```javascript
@@ -1062,7 +1069,9 @@ contract Raffle is VRFConsumerBaseV2Plus {
 
     uint256 private s_lastTimeStamp;
 
-    constructor(uint256 entranceFee, uint256 interval, address vrfCoordinator) VRFConsumerBaseV2Plus(vrfCoordinator) // here we are going to define the vrfCoordinator address during this contracts deployment, and this will pass the address to the VRFConsumerBaseV2Plus constructor.
+    constructor(uint256 entranceFee, uint256 interval, address vrfCoordinator) 
+    // `VRFConsumerBaseV2Plus` is the name of the contract we are inheriting from
+    VRFConsumerBaseV2Plus(vrfCoordinator) // here we are going to define the vrfCoordinator address during this contracts deployment, and this will pass the address to the VRFConsumerBaseV2Plus constructor.
     
     {
         i_entranceFee = entranceFee;
@@ -1072,6 +1081,83 @@ contract Raffle is VRFConsumerBaseV2Plus {
 }
 
 ```
+
+9. Import `VRFV2PlusClient` into your file as this is a file that the VRF needs. (import but do NOT inherit)
+```js
+import {VRFV2PlusClient} from
+    "../lib/chainlink-brownie-contracts/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
+```
+
+10. After doing everything above. we need to fill out the data in the pasted section that we copied from chainlink in step 2/3. You can read the comments here or read from the Chainlink docs to find out what the variables in example function `pickWinner` do. (https://docs.chain.link/vrf/v2-5/getting-started)
+```js
+contract Raffle is VRFConsumerBaseV2Plus {
+
+// this is a uint16 because it will be a very small number and will never change.
+    uint16 private constant REQUEST_CONFIRMATIONS = 3; // // how many blocks the VRF should wait before sending us the random number
+
+    uint32 private constant NUM_WORDS = 1; // the number of random numbers that we want
+
+    // this is being declared to identify its type of uint256. this will be how much it costs to enter the raffle. it is being initialized in the constructor and will be set when the contract is deployed through the deployment script.
+    uint256 private immutable i_entranceFee; // we made this private to save gas. because it is private we need a getter function for it
+
+    // this variable is declared to set the interval of how long each raffle will be. it is being initialized in the constructor and will be set when the contract is deployed through the deployment script.
+    // @dev the duration of the lottery in seconds.
+    uint256 private immutable i_interval;
+    // the amount of gas we are willing to send for the chainlink VRF
+    bytes32 private immutable i_keyHash;
+    // kinda linke the serial number for the request to Chainlink VRF
+    uint256 private immutable i_subscriptionId;
+    // Max amount of gas you are willing to spend when the VRF sends the RNG back to you
+    uint32 private immutable i_callbackGasLimit;
+
+    constructor(
+        uint256 entranceFee,
+        uint256 interval,
+        address vrfCoordinator,
+        bytes32 gasLane,
+        uint256 subscriptionId,
+        uint32 callbackGasLimit
+    ) VRFConsumerBaseV2Plus(vrfCoordinator) {
+        // entranceFee gets set in the deployment script(when the contract is being deployed).
+        i_entranceFee = entranceFee;
+        // interval gets set in the deployment script(when the contract is being deployed).
+        i_interval = interval;
+        // sets the s_lastTimeStamp variable to the current block.timestamp when deployed.
+        s_lastTimeStamp = block.timestamp;
+        // keyHash to chainlink means the amount of max gas we are willing to pay. So we named it gasLane because we like gasLane as the name more
+        i_keyHash = gasLane;
+        // sets i_subscriptionId equal to the one set at deployment
+        i_subscriptionId = subscriptionId;
+
+        // Max amount of gas you are willing to spend when the VRF sends the RNG back to you
+        i_callbackGasLimit = callbackGasLimit;
+    }
+
+    function pickWinner() external {
+        // this checks to see if enough time has passed
+        if ((block.timestamp - s_lastTimeStamp) < i_interval) {
+            revert();
+        }
+        // calling to Chainlink VRF to get a randomNumber
+        uint256 requestId = s_vrfCoordinator.requestRandomWords(
+            VRFV2PlusClient.RandomWordsRequest({
+                keyHash: i_keyHash, // how much gas you are willing to pay
+                subId: i_subscriptionId, // kinda of like a serial number for the request
+                requestConfirmations: REQUEST_CONFIRMATIONS, // how many blocks the VRF should wait before sending us the random number
+                callbackGasLimit: i_callbackGasLimit, // Max amount of gas you are willing to spend when the VRF sends the RNG back to you
+                numWords: NUM_WORDS, // the number of random numbers that we want
+                extraArgs: VRFV2PlusClient._argsToBytes(
+                    // Set nativePayment to true to pay for VRF requests with Sepolia ETH instead of LINK
+                    VRFV2PlusClient.ExtraArgsV1({nativePayment: false})
+                )
+            })
+        );
+    }
+
+    function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) internal override {}
+}
+```
+
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -1198,6 +1284,7 @@ Will update this later!
 `ctrl` + `k`(in terminal) = clears terminal (VSCode)
 `ctrl` + `l` = open AI chat 
 `ctrl` + `n` = new tab
+`ctrl` + `p` = command pallet
 `ctrl` + `s` = save file
 `ctrl` + `v` = paste
 `ctrl` + `w` = closes currently active/focused tab
