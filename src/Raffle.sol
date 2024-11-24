@@ -90,6 +90,9 @@ contract Raffle is VRFConsumerBaseV2Plus {
     event RaffleEntered(address indexed player); // the player is indexed because this means
     // ^ the player is indexed because events are logged to the EVM. Indexed data in events are essentially the important information that can be easily queried on the blockchain. Non-Indexed data are abi-encoded and difficult to decode.
 
+    // event happens when a winner is picked!
+    event WinnerPicked(address indexed winner);
+
     constructor(
         uint256 entranceFee,
         uint256 interval,
@@ -176,12 +179,21 @@ contract Raffle is VRFConsumerBaseV2Plus {
         // the state of the raffle changes to open so players can join again.
         s_raffleState = RaffleState.OPEN;
 
+        // s_players gets updated to a new address array of size 0 (since it removed all items in the array, it starts a 0) that is also payable
+        s_players = new address payable[](0); // resets the array
+
+        // updates the current timestamp into the most recent timestamp so we know when this raffle started
+        s_lastTimeStamp = block.timestamp;
+
         // pay the recent winner with the whole amount of the contract
         (bool success,) = s_recentWinner.call{value: address(this).balance}("");
         // if not success then revert
         if (!success) {
             revert Raffle__TransferFailed();
         }
+
+        //emit an event when the winner is picked!
+        emit WinnerPicked(s_recentWinner);
     }
 
     ////////////////////////
