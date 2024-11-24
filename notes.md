@@ -1010,7 +1010,68 @@ remappings = ['@chainlink/contracts/=lib/chainlink-brownie-contracts/contracts']
 ```js
 contract Raffle is VRFConsumerBaseV2Plus {}
 ```
-8. 
+8. Update your constructor to inherit from Chainlink's VRF constructor.
+Example:
+
+Before Inheritance:
+```js
+contract Raffle {
+
+    uint256 private immutable i_entranceFee; 
+    uint256 private immutable i_interval;
+
+    uint256 private s_lastTimeStamp;
+
+    constructor(uint256 entranceFee, uint256 interval) {
+        i_entranceFee = entranceFee;
+        i_interval = interval;
+        s_lastTimeStamp = block.timestamp;
+    }
+}
+
+```
+
+
+Chainlink VRF V2.5's constructor:
+```js
+abstract contract VRFConsumerBaseV2Plus is IVRFMigratableConsumerV2Plus, ConfirmedOwner {
+  error OnlyCoordinatorCanFulfill(address have, address want);
+  error OnlyOwnerOrCoordinator(address have, address owner, address coordinator);
+  error ZeroAddress();
+
+  // s_vrfCoordinator should be used by consumers to make requests to vrfCoordinator
+  // so that coordinator reference is updated after migration
+  IVRFCoordinatorV2Plus public s_vrfCoordinator;
+
+  /**
+   * @param _vrfCoordinator address of VRFCoordinator contract
+   */
+  constructor(address _vrfCoordinator) ConfirmedOwner(msg.sender) {
+    if (_vrfCoordinator == address(0)) {
+      revert ZeroAddress();
+    }
+    s_vrfCoordinator = IVRFCoordinatorV2Plus(_vrfCoordinator);
+  }
+```
+
+After Child Contract Inherits:
+```js
+contract Raffle is VRFConsumerBaseV2Plus {
+     uint256 private immutable i_entranceFee; 
+    uint256 private immutable i_interval;
+
+    uint256 private s_lastTimeStamp;
+
+    constructor(uint256 entranceFee, uint256 interval, address vrfCoordinator) VRFConsumerBaseV2Plus(vrfCoordinator) // here we are going to define the vrfCoordinator address during this contracts deployment, and this will pass the address to the VRFConsumerBaseV2Plus constructor.
+    
+    {
+        i_entranceFee = entranceFee;
+        i_interval = interval;
+        s_lastTimeStamp = block.timestamp;
+    }
+}
+
+```
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
