@@ -147,7 +147,9 @@ contract Example {
 - Remember that private doesn't mean secret - data is still visible on the blockchain
 
 ### Variables
-All of the types variables are: `boolean`, `unit`(only positive), `int`(postive or negative), `string`, `bytes`
+All of the value types variables are: `boolean`, `unit`(only positive), `int`(postive or negative), `string`, `bytes`, `address`
+
+The reference types of variables are: `arrays`, `structs`, `mappings`. 
 
 
 The Followings variable must be declared at the contract level (not in any functions):
@@ -242,6 +244,156 @@ contract Raffle {
     }
 }
 ```
+
+#### Reference Types Variables
+
+The reference types of variables are: `arrays`, `structs`, `mappings`. 
+
+##### Arrays
+
+There are two types of Arrays, static and dynamic.
+Dynamic array: the size of the array can grow and shrink
+Static array: the size is fixed: example: Person[3]
+
+
+Setting up an array variable:
+Examples:
+```js
+// an array of addresses called funders.
+    address[] private s_funders;
+
+// address array(list) of players who enter the raffle
+address payable[] private s_players; // this array is NOT constant because this array will be updated everytime a new person enters the raffle.
+// ^ this is payable because someone in this raffle will win the money and they will need to be able to receive the payout
+```
+
+Pushing items into an array example:
+```js
+ // You can create your own types by using the "struct" keyword
+    struct Person {
+        // for every person, they are going to have a favorite number and a name:
+        uint256 favoriteNumber; // slot 0
+        string name; // slot 1
+    }
+
+    //dynamic array of type struct person
+    Person[] public listOfPeople; // Gets defaulted to a empty array
+
+     // arrays come built in with the push function that allows us to add elements to an array
+    function addPerson(string memory _name, uint256 _favoriteNumber) public {
+        // pushes(adds) a user defined person into the Person array
+        listOfPeople.push(Person(_favoriteNumber, _name));
+
+        // adds the created mapping to this function, so that when you look up a name, you get their favorite number back
+        nameToFavoriteNumber[_name] = _favoriteNumber;
+    }
+```
+
+To reset an array:
+Example:
+```js
+ function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) internal override {
+        uint256 indexOfWinner = randomWords[0] % s_players.length; 
+        address payable recentWinner = s_players[indexOfWinner];
+        s_recentWinner = recentWinner;
+        s_raffleState = RaffleState.OPEN;
+
+        // s_players gets updated to a new address array of size 0 to start(since it removed all items in the array, it starts a 0) that is also payable
+        s_players = new address payable[](0); // resets the array
+
+        // updates the current timestamp into the most recent timestamp so we know when this raffle started
+        s_lastTimeStamp = block.timestamp;
+
+        (bool success,) = s_recentWinner.call{value: address(this).balance}("");
+        if (!success) {
+            revert Raffle__TransferFailed();
+        }
+        emit WinnerPicked(s_recentWinner);
+    }
+```
+
+##### Structs
+Structs are custom data types that let you create your own complex data structure by grouping together different variables. They're like creating a template for a custom object.
+
+Example:
+```js
+ // You can create your own types by using the "struct" keyword
+    struct Person {
+        // for every person, they are going to have a favorite number and a name:
+        uint256 favoriteNumber; // slot 0
+        string name; // slot 1
+    }
+
+//dynamic array of type struct `person`
+Person[] public listOfPeople; // Gets defaulted to a empty array
+
+ // arrays come built in with the push function that allows us to add elements to an array
+function addPerson(string memory _name, uint256 _favoriteNumber) public {
+// pushes(adds) a user defined person into the Person array
+listOfPeople.push(Person(_favoriteNumber, _name));
+// adds the created mapping to this function, so that when you look up a name, you get their favorite number back
+nameToFavoriteNumber[_name] = _favoriteNumber;
+    }
+```
+
+##### Mappings
+Mappings are key-value pair data structures, similar to hash tables or dictionaries in other languages. They're unique in Solidity because all possible keys exist by default and map to a value of 0/false/empty depending on the value type.
+
+examples:
+```js
+// mapping types are like a search functionality or dictionary
+    mapping(string => uint256) public nameToFavoriteNumber;
+
+    function addPerson(string memory _name, uint256 _favoriteNumber) public {
+        // pushes(adds) a user defined person into the Person array
+        listOfPeople.push(Person(_favoriteNumber, _name));
+
+        // adds the created MAPPING to this function, so that when you look up a name, you get their favorite number back
+        nameToFavoriteNumber[_name] = _favoriteNumber;
+    }
+```
+```js
+    // a mapping, mapping the addresses and their amount funded.
+    // the names "funder" and "amountFunded" is "syntaxic sugar", just makes it easier to read
+    mapping(address funder => uint256 amountFunded) private s_addressToAmountFunded;
+
+    function fund() public payable {
+     
+        require(msg.value.getConversionRate(s_priceFeed) >= MINIMUM_USD, "didn't send enough ETH");
+
+        // this line keeps track of how much each sender has sent
+        // you read it like: mapping(check the mapping) address => amount sent of the sender. So how much the sender sent = how much the sender has sent plus how much he is currently sending.
+        // addressToAmountFunded[msg.sender] = addressToAmountFunded[msg.sender] + msg.value;
+        //above is the old way. below is the shortcut with += . This += means we are adding the new value to the existing value that already exists.
+        s_addressToAmountFunded[msg.sender] += msg.value;
+
+        // the users whom successfully call this function will be added to the array.
+        s_funders.push(msg.sender);
+    }
+
+     function cheaperWithdraw() public onlyOwner {
+        uint256 funderLength = s_funders.length;
+        for (uint256 funderIndex = 0; funderIndex < funderLength; funderIndex++) {
+            address funder = s_funders[funderIndex];
+            
+            // then we reset this funders amount(this is tracked by the mapping of "addressToAmountFunded") to 0 when he withdraws
+            s_addressToAmountFunded[funder] = 0;
+        }
+        s_funders = new address[](0);
+        (bool callSuccess, ) =
+            payable(msg.sender).call{value: address(this).balance}(""); 
+        require(callSuccess, "Call Failed");
+    }
+
+    /* Getter Function since the mapping is private to save gas */
+
+     // This function allows anyone to check how much eth a specific address has funded to the contract.
+    function getAddressToAmountFunded(address fundingAddress) external view returns (uint256) {
+        // takes the fundingAddress parameter that users input and reads and returns the amount that that address has funded. It is accessing the mapping of s_addressToAmountFunded which stores the funding history.
+        return s_addressToAmountFunded[fundingAddress];
+    }
+```
+
 
 ### Constructors
 Constructors are special functions that are executed only once when a contract is deployed.
