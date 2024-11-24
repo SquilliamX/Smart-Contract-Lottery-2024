@@ -1,6 +1,6 @@
 # Notes 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-## Getting Started
+## Getting Started Notes
 
 To start a new foundry project, run `forge init`
 To compile a foundry project, run `forge build`
@@ -48,8 +48,8 @@ Layout of Functions:
  9. external & public view & pure functions
 
 
-### CEI
- When writing smart contacts, you always want to follow the CEI (Checks, Effects, Interactions) pattern.
+### CEI (Checks, Effects, Interactions) Notes
+ When writing smart contacts, you always want to follow the CEI (Checks, Effects, Interactions) pattern in order to prevent reentrancy vulnerabilities and other vulnerabilities.
  This would look like
 
  ```js
@@ -66,7 +66,7 @@ function exampleCEI() public {
  ```
 
 
-### Visibility Modifiers:
+### Visibility Modifier Notes: 
 
 There are 4 types of visibility modifiers in solidity. Public, Private, External, Internal.
 
@@ -162,7 +162,7 @@ contract Example {
 - Be explicit about visibility (don't rely on defaults)
 - Remember that private doesn't mean secret - data is still visible on the blockchain
 
-### Variables
+### Variable Notes
 All of the value types variables are: `boolean`, `unit`(only positive), `int`(postive or negative), `string`, `bytes`, `address`
 
 The reference types of variables are: `arrays`, `structs`, `mappings`. 
@@ -170,14 +170,14 @@ The reference types of variables are: `arrays`, `structs`, `mappings`.
 
 The Followings variable must be declared at the contract level (not in any functions):
 
-#### Constants
+#### Constant Notes
 Variables that will never be updated or changed can be listed as constant. 
 For example:
 `uint8 public constant DECIMALS = 8; ` - constant veriable should be CAPITALIZED as seen in this example.
 Constant variables are directly embedded in the bytecode. This saves gas.
 `constant` is a state mutability modifier.
 
-#### Immutable
+#### Immutable Note
 Variables that are declared at the contract level but initialized in the constructor can be listed as Immutable. This saves gas.
 For Example:
 ```javascript
@@ -190,7 +190,7 @@ address public immutable i_owner; // As you can see immutable variables should b
 Immutable variables are directly embedded in the bytecode when the contract is deployed and can only be set once during contract construction.
 `immutable` is a state mutability modifier.
 
-#### Storage Variables
+#### Storage Variable Notes
 Variables that are not constant or immutable but are declared at the contract level at saved in storage. So these variables should be named with `s_`.
 For Example:
 ```javascript
@@ -202,7 +202,7 @@ State Variables declared at contract level by default ARE stored in storage.
 Storage variables are mutable by default (can be changes at anytime), so there isn't a specific state mutability modifier.
 
 
-#### Saving Gas with Storage Variables
+#### Saving Gas with Storage Variable Notes
 
 If you have a storage variable or immutable variables (not constant variables), then you can save gas and make the contract more reeadable by making the storage/immutable variables `private` and making a getter function that grabs the storage variable.
 Example:
@@ -241,7 +241,7 @@ Example:
     }
 ```
 
-#### Custom Error Variables
+#### Custom Error Variable Notes
 
 Reverting with strings is not good because it costs too much gas. Instead, save the error as a custome error and revert with the custom error.
 Example:
@@ -284,11 +284,11 @@ contract Raffle {
 }
 ```
 
-#### Reference Types Variables
+#### Reference Types Variable Notes
 
 The reference types of variables are: `arrays`, `structs`, `mappings`. 
 
-##### Arrays
+##### Array Notes
 
 There are two types of Arrays, static and dynamic.
 Dynamic array: the size of the array can grow and shrink
@@ -351,7 +351,7 @@ Example:
     }
 ```
 
-##### Structs
+##### Struct Notes
 Structs are custom data types that let you create your own complex data structure by grouping together different variables. They're like creating a template for a custom object.
 
 Example:
@@ -375,7 +375,7 @@ nameToFavoriteNumber[_name] = _favoriteNumber;
     }
 ```
 
-##### Mappings
+##### Mapping Notes
 Mappings are key-value pair data structures, similar to hash tables or dictionaries in other languages. They're unique in Solidity because all possible keys exist by default and map to a value of 0/false/empty depending on the value type.
 
 examples:
@@ -434,7 +434,7 @@ examples:
 ```
 
 
-### Constructors
+### Constructor Notes
 Constructors are special functions that are executed only once when a contract is deployed.
 
 Constructor Facts:
@@ -462,7 +462,7 @@ contract Raffle {
 }
 ```
 
-### Events
+### Event Notes
 When a storage variable is updated, we should always emit an event. This makes migration/version-updates of contracts much easier and events make front-end "indexing" much easier. It allows for the smart contract, front-end, and blockchain to easily know when something has been updated.
 Example:
 ```javascript
@@ -492,7 +492,7 @@ contract Raffle() {
 }
 ```
 
-### Enums 
+### Enum Notes
 
 An Enum (enumeration) is a type declaration. An enum is a way to create a user-defined type with a fixed set of constant values or states. It's useful for representing a fixed number of options or states in a more readable way.
 
@@ -580,7 +580,7 @@ In enums:
 
 
 
-### Inheritance
+### Inheritance Notes
 
 To inherit from another contract, import the contract and inherit it with `is` keyword.
 Example:
@@ -595,7 +595,7 @@ After inheriting contracts, you can use variables from the parent contract in th
 
 
 
-#### Inheriting Constructors
+#### Inheriting Constructor Notes
 
 If the contract you are inheriting from has a constructor, then the child contract(contract that is inheriting from the parent) needs to add that constructor.
 Example:
@@ -662,11 +662,11 @@ contract Raffle is VRFConsumerBaseV2Plus {
 
 ```
 
-### Overrides
+### Override Notes
 
 Functions tagged with `virtual` are overrided by functions with the same name but with the `override` keyword.
 
-### Modulo
+### Modulo Notes
 
 The ` % ` is called the modulo operation. It's kinda like divison, but it represents the remainder. 
 For example: 
@@ -681,7 +681,7 @@ but 10 % 2 = 0 as there is no remainder                         ` % ` = modulo
  
 
 
-### Sending Money in Solidity
+### Sending Money in Solidity Notes
 
 There are three ways to transfer the funds: transfer, send, and call
 
@@ -750,7 +750,7 @@ contract Raffle {
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-## Package Installing:
+## Package Installing Notes:
 
 to install packages, run `forge install` with a `--no-commit` at the end.
 for example:
@@ -767,7 +767,7 @@ exmaple:
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-## Remappings in foundry.toml:
+## Remappings in foundry.toml Notes:
 Remappings tell foundry to replace the mapping for imports. 
 for example:
 ```javascript
@@ -777,9 +777,18 @@ for example:
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-## Writing Tests For Smart Contracts
+## Smart Contract Tests Notes
 
 All Smart Contracts must have tests. You need tests before going for a smart contract audit or you will be turned away.
+
+When writing tests, following this order:
+1. Write deploy scripts to use in our tests so we can test the exact same way we are going to deploy these smart contracts
+    - Note these deployment scripts will not work on zkSync. zkSync needs scripts written in Bash (for now)
+2. Then Write tests in this order:
+    3. Local Chain (Foundry's Anvil)
+    4. Forked testnet
+    5. Forked mainnet
+  
 
 THe convention for test files is that all test files should end in `.t.sol`.
 
@@ -867,7 +876,7 @@ If we need to test a part of our code that is outside of our system(example: pri
 
 
 
- ### Sending money in tests:
+ ### Sending money in tests Notes:
  When writing a test in solidity and you want to pass money to the test, you write it like this:
  ```javascript
   function testFundUpdatesFundedDataStructure() public {
@@ -876,10 +885,10 @@ If we need to test a part of our code that is outside of our system(example: pri
  ```
  because the fund function that we are calling does not take any parameter, it should be written like `fundMe.fund{value: 10e18}();` and not like ``fundMe.fund({value: 10e18});``. This is because the fund function does not take any parameters but is payable. So {value: 10e18} is the value being passed while () is the parameters being passed. IF the fund function was written like `function fund(uint256 value) public payable {}` then the test line of `fundMe.fund({value: 10e18}); ` would indeed work.
 
- ### GAS INFO IN TESTS
+ ### GAS INFO IN TESTS Notes
  When working on tests in anvil, the gas price defaults to 0. So for us to simulate transactions in test with actual gas prices, we need to tell our tests to actually use real gas prices. This is where `vm.txGasPrice` comes in. (See `vm.txGasPrice` below in cheatcodes for tests)
 
- ### CHEATCODES FOR TESTS
+ ### CHEATCODES FOR TESTS Notes
  `makeAddr()` : This cheatcode creates a fake address for a fake person for testing Purposes.
  For example:
  ```javascript
@@ -968,7 +977,7 @@ function ...
 ...
 ```
  ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
- ## Chisel
+ ## Chisel Notes
 
  To run chisel, run `chisel` in your terminal.
  you can run `!help` in chisel to see everything you can do in the chisel terminal.
@@ -1022,9 +1031,9 @@ in the exmaple above, we are deploying to anvil's blockchain with a fake private
 
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-## Scripts
+## Script Notes
 
-### Getting Started with Scripts
+### Getting Started with Scripts Notes
 
 When writing Scripts, you must import the script directory from foundry. and if you are using console.log, then you must import console.log as well.
 For Example:
@@ -1071,7 +1080,7 @@ contract DeployFundMe is Script {
 }
 ```
 
-### Deploying A Script
+### Deploying A Script Notes
 If you have a script, you can run a simulation of deploying to a blockchain with the command in your terminal of `forge script script/<file-name> --rpc-url http://<endpoint-url>` 
 
 example:
@@ -1096,7 +1105,7 @@ example:
 *** NEVER USE A .ENV FOR PRODUCTION BUILDS, ONLY USE A .ENV FOR TESTING ***
 
 
-### Interaction Scripts
+### Interaction Script Notes
 (its most likely easier to just use Cast Send to interact with deployed contracts.)
 
 You can write a script to interact with your deployed contract. This way, if you want to repeatedly call a function of interact with your contract for any reason, a script is a great way to do so as it makes these interactions reproducible. These interaction scripts should be saved in the script/Interactions folder!
@@ -1136,7 +1145,7 @@ Always write tests for scripts as getting them wrong and deploying them is a was
 
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-## BroadCast Folder:
+## BroadCast Folder Notes:
 
 the `dry-run` folder is where the transactions with no blockchain specified go.
 
@@ -1195,7 +1204,7 @@ example:
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-## DEPLOYING PRODUCTION CONTRACTS
+## DEPLOYING PRODUCTION CONTRACT Notes
 
 
 *** DEPLOYING PRODUCTION CONTRACTS ***
@@ -1221,7 +1230,7 @@ after encrypting your private key clear your terminal's history with `history -c
 
 After deploying a contract copy the hash and input it into its blockchain's etherscan, then click on the "to" as this will be the contract. (The hash created is the hash of the transaction and the "to" is the contract itself.)
 
-### Verifying a Deploying Contract:
+### Verifying a Deploying Contract Notes:
 
 Manually (Not Recommended):
 1. When on the contract on etherscan, click the "Verify and Publish" button in the "Contract" tab of the contract on etherscan. This will take you to a different page on etherscan.
@@ -1241,7 +1250,7 @@ Example:
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-## How to interact with deployed contracts from the command line:
+## How to interact with deployed contracts from the command line Notes:
 
 After you deploy a contract, you can interact with it:
 
@@ -1323,13 +1332,13 @@ For example:
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-## ChainLink:
+## ChainLink Notes:
 
-### Aggregator PriceFeeds
+### Aggregator PriceFeeds Notes
 To Be filled out...
 
 
-### Chainlink VRF 2.5
+### Chainlink VRF 2.5 Notes
 Help: https://updraft.cyfrin.io/courses/foundry/smart-contract-lottery/implementing-chainlink-vrf
 
 The Chainlink VRF(Verifiable Random Function) is a way to generate a random number. Currently, chainlink has 2 ways of using this VRF, the `V2 Subscription Method` and `V2 Direct Funding Method`. The better option to use is `V2 Subscription Method` because it is much more scable. 
@@ -1530,7 +1539,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
 }
 ```
 
-### Chainlink Automation (Custom Logic)
+### Chainlink Automation (Custom Logic) Notes 
 
 Chainlink Automation (formerly called Keeper Network) is a decentralized service that enables the automatic execution of smart contracts and other blockchain tasks when specific conditions are met. Think of it as a highly reliable, blockchain-native scheduling system. It can call any functions for you whenever you want.
 
@@ -1612,7 +1621,7 @@ In this example, `checkUpkeep` checking to see if all the conditionals return tr
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-## MAKEFILE
+## MAKEFILE Notes
 
 A makefile is a way to create your own shortcuts. terminal commands in solidity can be very long, so you can essentially route your own shortcuts for terminal commands. Also, the `Makefile` needs to be `Makefile` and not `MakeFile` (the `f` needs to be lowercase) or `make` commands will not work.
 
@@ -1689,12 +1698,12 @@ fundSubscription:
 
 
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-## Everything ZK-SYNC
+## Everything ZK-SYNC Notes
 
 Zk-sync is a rollup L2.
 
 
-### Zk-SYNC Foundry
+### Zk-SYNC Foundry Notes
 When deploying to ZK-sync, you want to use the zk-sync version of foundry. Learn more at https://github.com/matter-labs/foundry-zksync. learn more @ https://updraft.cyfrin.io/courses/foundry/foundry-simple-storage/foundry-zksync. this is course "Foundry Fundamentals" section 1, video #27 - #32
 
 0. run `forge --version`
@@ -1711,7 +1720,7 @@ and if you want to switch back to zksync foundry, just run `foundryup-zksync` as
 
 when we run `forge build` in vanilla foundry, we get an `out` folder that has all the compilation details. when we run `forge build --zksync` in zksync foundry, we get a `zkout` folder with all the compilation details for zksync.
 
-### Deploying on ZK-SYNC
+### Deploying on ZK-SYNC Notes
 
 #### Running a local zkSync test node using Docker, and deploying a smart contract to the test node.
 to learn more, learn more @ https://github.com/Cyfrin/foundry-simple-storage-cu and at the bottom it has a "zk-Sync" intructions
