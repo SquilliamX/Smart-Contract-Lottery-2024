@@ -48,6 +48,22 @@ Layout of Functions:
  9. external & public view & pure functions
 
 
+### CEI
+ When writing smart contacts, you always want to follow the CEI (Checks, Effects, Interactions) pattern.
+ This would look like
+
+ ```js
+function exampleCEI() public {
+    // Checks
+    // so this would be like require statements/conditionals
+
+    // Effects
+    // this would be updating all variables and emitting events
+
+    // Interactions
+    // This would be anything that interacts with users or the world. Examples include sending money to users, sending nfts, etc
+}
+ ```
 
 
 ### Visibility Modifiers:
@@ -242,6 +258,29 @@ contract Raffle {
             revert Raffle__SendMoreToEnterRaffle();
         } // this is the best way to write conditionals because they are so gas efficent.
     }
+}
+```
+
+To make custome errors even easier for users or devs to read when they get this error, we can let them know why they go this error:
+Example
+```js
+contract Raffle {
+    error Raffle__UpkeepNotNeeded(uint256 balance, uint256 playerslength, uint256 raffleState);
+
+
+    function performUpkeep(bytes calldata /* performData */ ) external {
+        //
+        (bool upkeepNeeded,) = checkUpkeep("");
+        //
+        if (!upkeepNeeded) {
+            revert Raffle__UpkeepNotNeeded(
+                address(this).balance,
+                s_players.length,
+                uint256(
+                    s_raffleState /*This could be a Rafflestate raffleState as well. Since enums map to their indexed position it can also be uint256(s_raffleState) since we have this defined as well */
+                )
+            );
+        }
 }
 ```
 
@@ -1491,6 +1530,85 @@ contract Raffle is VRFConsumerBaseV2Plus {
 }
 ```
 
+### Chainlink Automation (Custom Logic)
+
+Chainlink Automation (formerly called Keeper Network) is a decentralized service that enables the automatic execution of smart contracts and other blockchain tasks when specific conditions are met. Think of it as a highly reliable, blockchain-native scheduling system. It can call any functions for you whenever you want.
+
+help: `https://updraft.cyfrin.io/courses/foundry/smart-contract-lottery/chainlink-automation` & `https://updraft.cyfrin.io/courses/foundry/smart-contract-lottery/implementing-automation-2`
+
+Steps:
+1. In `https://docs.chain.link/chainlink-automation/guides/compatible-contracts` click on the "Open in Remix" button. Here you will see the the AutomationCounter example, as you can see, you need a checkUpkeep function and a performUpkeep function.
+
+2. You will need to create a `checkUpkeep` and `performUpkeep` function. 
+The `checkUpkeep` function will be called indefinitely by the chain link nodes until the Boolean in the return function of the `checkUpkeep` function returns true. Once it returns true it will trigger `performUpkeep`. The `checkUpkeep` function is the function that has all the requirements that are needed to be true in order to perform the automated task and the automated task that you want is in and performed in `performUpkeep`
+Example:
+```js
+ /**
+     * @dev this is the function that the chainlink nodes will call to see
+     * if the lottery is ready to have a winner picked.
+     * The following should be true in order for upkeepNeeded to be true:
+     * 1. The time inteval has passes between raffle runs
+     * 2. the lottery is open.
+     * 3. The contract has ETH(has players)
+     * 4. Implicitly, your subscription has LINK
+     * @param - ignored
+     * @return upkeepNeeded - true if it's time to restart the lottery
+     */
+    // checkData being commented out means that it is not being used anywhere in the function but it can be used if we want.
+    function checkUpkeep(bytes memory /* checkData */ )
+        public
+        view
+        returns (
+            // variables defined in return function are already initialized. bool upkeepNeeded starts as false until updated otherwise.
+            bool upkeepNeeded,
+            bytes memory /* performData */
+        )
+    {
+        // this checks to see if enough time has passed
+        bool timHasPassed = ((block.timestamp - s_lastTimeStamp) >= i_interval);
+        // the state of the raffle changes to open so players can join again.
+        bool isOpen = s_raffleState == RaffleState.OPEN;
+        // checks that this raffle contract has some money in it
+        bool hasBalance = address(this).balance > 0;
+        // checks there is at least 1 player
+        bool hasPlayers = s_players.length > 0;
+        // if all the above booleans are true, then upkeepNeeded will be set to true as well.
+        upkeepNeeded = timHasPassed && isOpen && hasBalance && hasPlayers;
+        // when this contract is called it will return whether or not upkeepNeeded is true or not. it will also return the performData but we are not using performData in this function so it is an empty string.
+        return (upkeepNeeded, "");
+    } // - chainlink nodes will call this function non-stop, and when it returns true, it will call performUpkeep.
+
+    function performUpkeep(bytes calldata /* performData */ ) external {
+        //
+        (bool upkeepNeeded,) = checkUpkeep("");
+        //
+        if (!upkeepNeeded) {
+            revert();
+        }
+    
+        s_raffleState = RaffleState.CALCULATING;
+
+        // the following is for calling to Chainlink VRF to get a randomNumber and has nothing to do with chainlink automation, this is just the automated task that is being performed in this example.
+        uint256 requestId = s_vrfCoordinator.requestRandomWords(
+            VRFV2PlusClient.RandomWordsRequest({
+                keyHash: i_keyHash, // how much gas you are willing to pay
+                subId: i_subscriptionId, // kinda of like a serial number for the request
+                requestConfirmations: REQUEST_CONFIRMATIONS, // how many blocks the VRF should wait before sending us the random number
+                callbackGasLimit: i_callbackGasLimit, // Max amount of gas you are willing to spend when the VRF sends the RNG back to you
+                numWords: NUM_WORDS, // the number of random numbers that we want
+                extraArgs: VRFV2PlusClient._argsToBytes(
+                    // Set nativePayment to true to pay for VRF requests with Sepolia ETH instead of LINK
+                    VRFV2PlusClient.ExtraArgsV1({nativePayment: false})
+                )
+            })
+        );
+    }
+```
+
+In this example, `checkUpkeep` checking to see if all the conditionals return true then if all the conditionals return true then the return boolean in the `checkUpkeep` function declaration returns true as well. Then once the `checkUpkeep` function returns that ` bool upkeepNeeded` is true, It will perform perform upkeep. The `performUpkeep` function makes sure that the `checkUpkeep` is true, then it calls for a random number to be generated from Chainlink VRF. (The Chainlink VRF to get a randomNumber task and has nothing to do with chainlink automation, this task is just the automated task that is being performed in this example. )
+
+
+
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -1596,7 +1714,7 @@ when we run `forge build` in vanilla foundry, we get an `out` folder that has al
 ### Deploying on ZK-SYNC
 
 #### Running a local zkSync test node using Docker, and deploying a smart contract to the test node.
-to learn more, learn more @ https://github.com/Cyfrin/foundry-simple-storage-cu and at the bottom it has a "zn-Sync" intructions
+to learn more, learn more @ https://github.com/Cyfrin/foundry-simple-storage-cu and at the bottom it has a "zk-Sync" intructions
 
 run `foundryup-zksync`
 install docker.
