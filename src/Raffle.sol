@@ -44,6 +44,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
     error Raffle__SendMoreToEnterRaffle(); // custom errors save gas
     error Raffle__TransferFailed();
     error Raffle__RaffleNotOpen();
+    error Raffle__UpkeepNotNeeded(uint256 balance, uint256 playerslength, uint256 raffleState);
 
     /* Type Declarations */
     enum RaffleState {
@@ -141,10 +142,53 @@ contract Raffle is VRFConsumerBaseV2Plus {
         emit RaffleEntered(msg.sender); // everytime we update storage, we always want to emit an event
     }
 
-    function pickWinner() external {
+    /**
+     * @dev this is the function that the chainlink nodes will call to see
+     * if the lottery is ready to have a winner picked.
+     * The following should be true in order for upkeepNeeded to be true:
+     * 1. The time inteval has passes between raffle runs
+     * 2. the lottery is open.
+     * 3. The contract has ETH(has players)
+     * 4. Implicitly, your subscription has LINK
+     * @param - ignored
+     * @return upkeepNeeded - true if it's time to restart the lottery
+     */
+    // checkData being commented out means that it is not being used anywhere in the function but it can be used if we want.
+    function checkUpkeep(bytes memory /* checkData */ )
+        public
+        view
+        returns (
+            // variables defined in return function are already initialized. bool upkeepNeeded starts as false until updated otherwise.
+            bool upkeepNeeded,
+            bytes memory /* performData */
+        )
+    {
         // this checks to see if enough time has passed
-        if ((block.timestamp - s_lastTimeStamp) < i_interval) {
-            revert();
+        bool timHasPassed = ((block.timestamp - s_lastTimeStamp) >= i_interval);
+        // the state of the raffle changes to open so players can join again.
+        bool isOpen = s_raffleState == RaffleState.OPEN;
+        // checks that this raffle contract has some money in it
+        bool hasBalance = address(this).balance > 0;
+        // checks there is at least 1 player
+        bool hasPlayers = s_players.length > 0;
+        // if all the above booleans are true, then upkeepNeeded will be set to true as well.
+        upkeepNeeded = timHasPassed && isOpen && hasBalance && hasPlayers;
+        // when this contract is called it will return whether or not upkeepNeeded is true or not. it will also return the performData but we are not using performData in this function so it is an empty string.
+        return (upkeepNeeded, "");
+    } // - chainlink nodes will call this function non-stop, and when it returns true, it will call performUpkeep.
+
+    function performUpkeep(bytes calldata /* performData */ ) external {
+        //
+        (bool upkeepNeeded,) = checkUpkeep("");
+        //
+        if (!upkeepNeeded) {
+            revert Raffle__UpkeepNotNeeded(
+                address(this).balance,
+                s_players.length,
+                uint256(
+                    s_raffleState /*This could be a Rafflestate raffleState as well. Since enums map to their indexed position it can also be uint256(s_raffleState) since we have this defined as well */
+                )
+            );
         }
         // when someone calls the pickWinner, users will no longer be able to join the raffle since the state of the raffle has changed to calculating and is no longer open.
         s_raffleState = RaffleState.CALCULATING;
