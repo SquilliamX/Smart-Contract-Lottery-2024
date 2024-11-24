@@ -147,14 +147,17 @@ contract Example {
 - Remember that private doesn't mean secret - data is still visible on the blockchain
 
 ### Variables
-The Following variable types must be declared at the contract level (not in any functions):
+All of the types variables are: `boolean`, `unit`(only positive), `int`(postive or negative), `string`, `bytes`
+
+
+The Followings variable must be declared at the contract level (not in any functions):
 
 #### Constants
 Variables that will never be updated or changed can be listed as constant. 
 For example:
 `uint8 public constant DECIMALS = 8; ` - constant veriable should be CAPITALIZED as seen in this example.
 Constant variables are directly embedded in the bytecode. This saves gas.
-
+`constant` is a state mutability modifier.
 
 #### Immutable
 Variables that are declared at the contract level but initialized in the constructor can be listed as Immutable. This saves gas.
@@ -167,6 +170,7 @@ address public immutable i_owner; // As you can see immutable variables should b
     }
 ``` 
 Immutable variables are directly embedded in the bytecode when the contract is deployed and can only be set once during contract construction.
+`immutable` is a state mutability modifier.
 
 #### Storage Variables
 Variables that are not constant or immutable but are declared at the contract level at saved in storage. So these variables should be named with `s_`.
@@ -177,6 +181,7 @@ For Example:
     AggregatorV3Interface private s_priceFeed;
 ```
 State Variables declared at contract level by default ARE stored in storage.
+Storage variables are mutable by default (can be changes at anytime), so there isn't a specific state mutability modifier.
 
 
 #### Saving Gas with Storage Variables
@@ -296,6 +301,94 @@ contract Raffle() {
 }
 ```
 
+### Enums 
+
+An Enum (enumeration) is a type declaration. An enum is a way to create a user-defined type with a fixed set of constant values or states. It's useful for representing a fixed number of options or states in a more readable way.
+
+Examples:
+```js                                   
+contract Raffle {
+
+      /* Type Declarations */
+        enum RaffleState {
+        OPEN, // index 0
+        CALCULATING // index 1
+    }
+
+    // The state of the raffle of type RaffleState(enum)
+    RaffleState private s_raffleState;
+
+    constructor(
+        uint256 entranceFee,
+        uint256 interval,
+        address vrfCoordinator,
+        bytes32 gasLane,
+        uint256 subscriptionId,
+        uint32 callbackGasLimit
+    ) VRFConsumerBaseV2Plus(vrfCoordinator) {
+        i_entranceFee = entranceFee;
+        i_interval = interval;
+        i_keyHash = gasLane;
+        i_subscriptionId = subscriptionId;
+        i_callbackGasLimit = callbackGasLimit;
+        s_lastTimeStamp = block.timestamp;
+
+        // when the contract is deployed it will be open
+        s_raffleState = RaffleState.OPEN; // this would be the same as s_raffleState = RaffleState.(0) since open in the enum is in index 0
+    }
+
+    function enterRaffle() external payable {
+        if (msg.value < i_entranceFee) {
+            revert Raffle__SendMoreToEnterRaffle();
+        }
+
+        // if the raffle is not open then any transactions to enterRaffle will revert
+        if (s_raffleState != RaffleState.OPEN) {
+            revert Raffle__RaffleNotOpen();
+        }
+
+        s_players.push(payable(msg.sender)); 
+        emit RaffleEntered(msg.sender); 
+    }
+
+    function pickWinner() external {
+        if ((block.timestamp - s_lastTimeStamp) < i_interval) {
+            revert();
+        }
+        // when someone calls the pickWinner, users will no longer be able to join the raffle since the state of the raffle has changed to calculating and is no longer open.
+        s_raffleState = RaffleState.CALCULATING;
+
+       ...
+    }
+
+    function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) internal override {
+        uint256 indexOfWinner = randomWords[0] % s_players.length; 
+        address payable recentWinner = s_players[indexOfWinner];
+        s_recentWinner = recentWinner;
+
+        // the state of the raffle changes to open so players can join again.
+        s_raffleState = RaffleState.OPEN;
+
+        (bool success,) = s_recentWinner.call{value: address(this).balance}("");
+        if (!success) {
+            revert Raffle__TransferFailed();
+        }
+    }
+}
+
+
+```
+
+In enums:
+
+- You can only be in ONE state at a time
+- Each option has a number behind the scenes (starting at index 0)
+- You can't make up new options that aren't in the list of the Enum you created.
+
+
+
+
+
 ### Inheritance
 
 To inherit from another contract, import the contract and inherit it with `is` keyword.
@@ -307,7 +400,9 @@ import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFCo
 // inheriting the Chainlink VRF
 contract Raffle is VRFConsumerBaseV2Plus {}
 ```
-After inheriting contracts, you can use variables from the parent contract in the child contract
+After inheriting contracts, you can use variables from the parent contract in the child contract.
+
+
 
 #### Inheriting Constructors
 
@@ -375,6 +470,92 @@ contract Raffle is VRFConsumerBaseV2Plus {
 }
 
 ```
+
+### Overrides
+
+Functions tagged with `virtual` are overrided by functions with the same name but with the `override` keyword.
+
+### Modulo
+
+The ` % ` is called the modulo operation. It's kinda like divison, but it represents the remainder. 
+For example: 
+
+`10` / `2` = `5`                                           Key: ` / ` = divison  
+but 10 % 2 = 0 as there is no remainder                         ` % ` = modulo
+
+10 % 3 = 1 (because 10 divided by 3 leaves a remainder of 1)
+
+20 % 7 = 6 (because the remainder is 6)
+(^ this is read `20 mod 7 equals 6`)
+ 
+
+
+### Sending Money in Solidity
+
+There are three ways to transfer the funds: transfer, send, and call
+
+Transfer (NOT RECOMMENDED):
+```js
+    // transfers balance from this contract's balance to the msg.sender
+    payable(msg.sender).transfer(address(this).balance); //  this is how you use transfer
+    // ^there is an issue with using transfer, as if it uses more than 2,300 gas it will throw and error and revert. (sending tokens from one wallet to another is already 2,100 gas)
+```
+
+Send (NOT RECOMMENDED) :
+```js
+    // we need to use "bool" when using `send` because if the call fails, it will not revert the transaction and the user would not get their money. ("send" also fails at 2,300 gas)
+    bool sendSuccess = payable(msg.sender).send(address(this).balance);
+    // require sendSuccess to be true or it reverts with "Send Failed"
+    require(sendSuccess, "Send failed");
+```
+
+Call (RECOMMENDED) :
+    Using `call` is lower level solidity and is very powerful, is the best one to use most of the time.
+
+    `call` can be used to call almost every function in all of ethereum without having an ABI!
+
+     Using `call` returns a boolean and bytes data. The bytes aren't important in the example below, so we commented it out and left the comma. (but really we would delete it if this was a production contract and we would leave the comma. however if we were calling a function we would keep the bytes data) (bytes objects are arrays which is why we use the memory keyword).
+    
+```js
+        (bool callSuccess, /* bytes memory dataReturned */ ) = payable(msg.sender).call{value: address(this).balance}(
+            "" /*<- this is where we would put info of another function if we were calling another function(but we arent here so we leave it blank) */
+        );
+        //        calls the value to send to the payable(msg.sender)^
+
+        // require callSuccess to be true or it reverts with "Call Failed"
+        require(callSuccess, "Call Failed");
+```
+
+Here is another example for the recommended `Call` to transfer funds:
+```js
+contract Raffle {
+    address payable private s_recentWinner;
+
+    ...
+
+     function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) internal override {
+        // randomWords is 0 because we are only calling for 1 Random number from chainlink VRF and the index starts at 0, so this represets the 1 number we called for.
+        uint256 indexOfWinner = randomWords[0] % s_players.length; // this says the number that is randomly generated modulo the amount of players in the raffle
+        //  ^ modulo means the remainder of the division. So if 52(random Number) % 20(amount of people in the raffle), this will equal 12 because 12 is the remainder! So whoever is in the 12th spot will win the raffle. And this is saved into the variable indexOfWinner ^
+
+        // the remainder of the modulo equation will be identified within the s_players array and saved as the recentWinner
+        address payable recentWinner = s_players[indexOfWinner];
+
+        // update the storage variable with the recent winner
+        s_recentWinner = recentWinner;
+
+        // pay the recent winner with the whole amount of the contract. 
+        (bool success,) = s_recentWinner.call{value: address(this).balance}("");
+        // if not success then revert
+        if (!success) {
+            revert Raffle__TransferFailed();
+        }
+    }
+}
+```
+
+
+
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
