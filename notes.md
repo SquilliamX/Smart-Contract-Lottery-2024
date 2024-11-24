@@ -238,6 +238,34 @@ contract Raffle {
 }
 ```
 
+### Constructors
+Constructors are special functions that are executed only once when a contract is deployed.
+
+Constructor Facts:
+- Called once during contract creation
+- Used to initialize state variables
+- Cannot be called after contract deployment
+- Only one constructor per contract
+
+Example:
+```js
+contract Raffle {
+
+    uint256 private immutable i_entranceFee; 
+    uint256 private immutable i_interval;
+
+    uint256 private s_lastTimeStamp;
+
+    // this constructor takes a entranceFee and interval, so when the owner deploys this contract, he will input what these variables are equal to.
+    constructor(uint256 entranceFee, uint256 interval) {
+        i_entranceFee = entranceFee;
+        i_interval = interval;
+        // at contract deployment, the s_lastTimeStamp will record the timestamp of the block in which the contract is deployed. This value will be used as the initial timestamp for the raffle contract.
+        s_lastTimeStamp = block.timestamp;
+    }
+}
+```
+
 ### Events
 When a storage variable is updated, we should always emit an event. This makes migration/version-updates of contracts much easier and events make front-end "indexing" much easier. It allows for the smart contract, front-end, and blockchain to easily know when something has been updated.
 Example:
@@ -268,8 +296,82 @@ contract Raffle() {
 }
 ```
 
+### Inheritance
+
+To inherit from another contract, import the contract and inherit it with `is` keyword.
+Example:
+```js
+// importing the Chainlink VRF
+import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
+
+// inheriting the Chainlink VRF
+contract Raffle is VRFConsumerBaseV2Plus {}
+```
+
+#### Inheriting Constructors
+
+If the contract you are inheriting from has a constructor, then the child contract(contract that is inheriting from the parent) needs to add that constructor.
+Example:
+
+Before Inheritance:
+```js
+contract Raffle {
+
+    uint256 private immutable i_entranceFee; 
+    uint256 private immutable i_interval;
+
+    uint256 private s_lastTimeStamp;
+
+    constructor(uint256 entranceFee, uint256 interval) {
+        i_entranceFee = entranceFee;
+        i_interval = interval;
+        s_lastTimeStamp = block.timestamp;
+    }
+}
+
+```
 
 
+Parent Contract we are inheriting from's constructor:
+```js
+abstract contract VRFConsumerBaseV2Plus is IVRFMigratableConsumerV2Plus, ConfirmedOwner {
+  error OnlyCoordinatorCanFulfill(address have, address want);
+  error OnlyOwnerOrCoordinator(address have, address owner, address coordinator);
+  error ZeroAddress();
+
+  // s_vrfCoordinator should be used by consumers to make requests to vrfCoordinator
+  // so that coordinator reference is updated after migration
+  IVRFCoordinatorV2Plus public s_vrfCoordinator;
+
+  /**
+   * @param _vrfCoordinator address of VRFCoordinator contract
+   */
+  constructor(address _vrfCoordinator) ConfirmedOwner(msg.sender) {
+    if (_vrfCoordinator == address(0)) {
+      revert ZeroAddress();
+    }
+    s_vrfCoordinator = IVRFCoordinatorV2Plus(_vrfCoordinator);
+  }
+```
+
+After Child Contract Inherits
+```js
+contract Raffle is VRFConsumerBaseV2Plus {
+     uint256 private immutable i_entranceFee; 
+    uint256 private immutable i_interval;
+
+    uint256 private s_lastTimeStamp;
+
+    constructor(uint256 entranceFee, uint256 interval, address vrfCoordinator) VRFConsumerBaseV2Plus(vrfCoordinator) // here we are going to define the vrfCoordinator address during this contracts deployment, and this will pass the address to the VRFConsumerBaseV2Plus constructor.
+    
+    {
+        i_entranceFee = entranceFee;
+        i_interval = interval;
+        s_lastTimeStamp = block.timestamp;
+    }
+}
+
+```
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -846,6 +948,72 @@ For example:
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+## ChainLink:
+
+### Aggregator PriceFeeds
+To Be filled out...
+
+
+### Chainlink VRF 2.5
+Help: https://updraft.cyfrin.io/courses/foundry/smart-contract-lottery/implementing-chainlink-vrf
+
+The Chainlink VRF(Verifiable Random Function) is a way to generate a random number. Currently, chainlink has 2 ways of using this VRF, the `V2 Subscription Method` and `V2 Direct Funding Method`. The better option to use is `V2 Subscription Method` because it is much more scable. 
+`V2 Subscription Method`: Fund the subscription and apply that to as many raffles/contracts/items as we want.
+`V2 Direct Funding Method`: Everytime we deploy a new raffle/contract/item we would have to refund it. 
+
+This section will be covering the ``V2 Subscription Method`` as it is better.
+
+Getting a Random Number through Chainlink VRF is a 2-step process.
+1. Request RNG (Random Number Generator) - We call the request in a transaction that we send
+2. Get RNG (Random Number Generated) - Then the chainlink node is going to give us the random number in a transaction that it sends. It sends it in the callback function(a function that chainlink VRF calls back to.) 
+
+Steps:
+1. In the link `https://docs.chain.link/vrf/v2-5/getting-started` you will find a `Open in Remix Button`, click that to see the full code.
+2. In `function rollDice` we can see the function calling Chainlink VRF for the RNG.
+```javascript
+  function rollDice(
+        address roller
+    ) public onlyOwner returns (uint256 requestId) {
+        require(s_results[roller] == 0, "Already rolled");
+        // Will revert if subscription is not set and funded.
+        // this is the section we want, copy from here ->
+        requestId = s_vrfCoordinator.requestRandomWords(
+            VRFV2PlusClient.RandomWordsRequest({
+                keyHash: s_keyHash,
+                subId: s_subscriptionId,
+                requestConfirmations: requestConfirmations,
+                callbackGasLimit: callbackGasLimit,
+                numWords: numWords,
+                extraArgs: VRFV2PlusClient._argsToBytes(
+                    // Set nativePayment to true to pay for VRF requests with Sepolia ETH instead of LINK
+                    VRFV2PlusClient.ExtraArgsV1({nativePayment: false})
+                )
+            })
+        ); // <- this is the section we want, copy to here
+
+        s_rollers[requestId] = roller;
+        s_results[roller] = ROLL_IN_PROGRESS;
+        emit DiceRolled(requestId, roller);
+    }
+```
+3. Copy and Paste this section that we want into your code where you want to get a random number
+4. This code will not work at first.  we need to import the chainlink contracts. Run `forge install smartcontractkit/chainlink-brownie-contracts@1.1.1 --no-commit`.
+5. In the Remix Example, copy and paste the `VRFConsumerBaseV2Plus` import.
+```javascript
+import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol"; // remove the version number from the import. Originally it has a @1.1.1 but thats only for remix
+```
+6. In the `foundry.toml` of your project, put an remapping in of:
+```js
+remappings = ['@chainlink/contracts/=lib/chainlink-brownie-contracts/contracts']
+```
+7. Make sure your contract inherits from the import:
+```js
+contract Raffle is VRFConsumerBaseV2Plus {}
+```
+8. 
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 ## MAKEFILE
 
 A makefile is a way to create your own shortcuts. terminal commands in solidity can be very long, so you can essentially route your own shortcuts for terminal commands. Also, the `Makefile` needs to be `Makefile` and not `MakeFile` (the `f` needs to be lowercase) or `make` commands will not work.
@@ -977,6 +1145,7 @@ Will update this later!
 `ctrl` + `/` = commenting out a line
 `ctrl` + ` = toggle terminal
 `ctrl` + `shift` + `t` = reopen the last closed tab
+`ctrl` + `shift` + `v` = paste without formating
 `ctrl` + <arrowKey> = move cursor to next word
 `ctrl` + `shift` + (←/→)<arrowKey> = select word by word
 `ctrl` + `shift` + (↑/↓)<arrowKey> = select line by line
