@@ -463,7 +463,7 @@ contract Raffle {
 ```
 
 ### Event Notes
-When a storage variable is updated, we should always emit an event. This makes migration/version-updates of contracts much easier and events make front-end "indexing" much easier. It allows for the smart contract, front-end, and blockchain to easily know when something has been updated.
+When a storage variable is updated, we should always emit an event. This makes migration/version-updates of contracts much easier and events make front-end "indexing" much easier. It allows for the smart contract, front-end, and blockchain to easily know when something has been updated. You can only have 3 indexed events per event and can have non indexed data. Indexed data is basically filtered data that is easy to read from the blockchain and non-indexed data will be abi-encoded on the blockchain and much much harder to read
 Example:
 ```javascript
 
@@ -874,6 +874,44 @@ If we need to test a part of our code that is outside of our system(example: pri
 
  you only want to deploy mocks when you are working on a local chain like anvil.
 
+ ### Testing Events
+
+To test an event, you need to copy and paste the events from the codebase to the test file in order to test them.
+
+Once you have the events in your test file, the logic for testing them is `vm.expectEmit(true/false, true/false, true/false, true/false, contractEmittingEvent)`
+
+These 3 first true/false statements will only be true when there is an indexed parameter, and the 4th one is for any data that is not indexed within the event. For example:
+```js
+contract RaffleTest is Test {
+    ...
+    // we copy and paste the event from the smart contract into our test
+    // as you can see there is only one indexed event and no other data.
+    event RaffleEntered(address indexed player, /* No Data */, /* No Data */, /* No Data */); // events can have up to 3 indexed parameters and other data that is not indexed.
+    ...
+    function setUp() external {
+        ...
+        vm.deal(PLAYER, STARTING_PLAYER_BALANCE);
+    }
+
+  function testEnteringRaffleEmitsEvent() public {
+        // Arrange
+        // next transaction will come from the PLAYER address that we made
+        vm.prank(PLAYER);
+        // Act 
+        // because we have an indexed parameter in slot 1 of the event, it is true. However we have no data in slot 2, 3, and 4  so they are false. `address(raffle) is the contract emitting the event`
+        // we expect the next event to have these parameters.
+        vm.expectEmit(true, false, false, false, address(raffle));
+        // the event that should be expected to be emitted from the next transaction
+        emit RaffleEntered(PLAYER);
+        // Assert
+        // PLAYER makes this transaction of entering the raffle and this should emit the event we are testing for.
+        raffle.enterRaffle{value: entranceFee}();
+    }
+
+
+}
+```
+
 
 
  ### Sending money in tests Notes:
@@ -975,6 +1013,15 @@ function ...
         uint256 gasUsed = (gasStart - gasEnd) * tx.gasprice; //tx.gasprice is built into solidity that tells you the current gas price
         // now when we run this test it will tell us how much gas was used.
 ...
+```
+
+`vm.warp` & `vm.roll`:
+`vm.warp`: allows us to warp time ahead so that foundry knows time has passed.
+`vm.roll`: rolls the blockchain forward to the block that you assign.
+These don't have do be used together, but they should be used together to avoid issues and be technically correct.
+Example:
+```js
+
 ```
  ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  ## Chisel Notes
