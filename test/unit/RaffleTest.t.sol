@@ -24,6 +24,9 @@ contract RaffleTest is Test {
     uint32 callBackGasLimit;
     uint256 subscriptionId;
 
+    event RaffleEntered(address indexed player);
+    event WinnerPicked(address indexed winner);
+
     function setUp() external {
         // deploy a new deployRaffle script named `deployer`
         DeployRaffle deployer = new DeployRaffle();
@@ -65,5 +68,41 @@ contract RaffleTest is Test {
         // Assert
         address playerRecorded = raffle.getPlayer(0);
         assert(playerRecorded == PLAYER);
+    }
+
+    function testEnteringRaffleEmitsEvent() public {
+        // Arrange
+        // next transaction will come from the PLAYER address that we made
+        vm.prank(PLAYER);
+        // Act
+        // because we have an indexed parameter in slot 1 of the event, it is true. However we have no data in slot 2, 3, and 4  so they are false. `address(raffle) is the contract emitting the event`
+        // we expect the next event to have these parameters.
+        vm.expectEmit(true, false, false, false, address(raffle));
+        // the event that should be expected to be emitted from the next transaction
+        emit RaffleEntered(PLAYER);
+        // Assert
+        // PLAYER makes this transaction of entering the raffle and this should emit the event we are testing for.
+        raffle.enterRaffle{value: entranceFee}();
+    }
+
+    function testDontAllowPlayersToEnterWhileRaffleIsCalculating() public {
+        // Arrange
+        // next transaction will come from the PLAYER address that we made
+        vm.prank(PLAYER);
+        // PLAYER pays the entrance fee and enters the raffle
+        raffle.enterRaffle{value: entranceFee}();
+        // vm.warp allows us to warp time ahead so that foundry knows time has passed.
+        vm.warp(block.timestamp + interval + 1); // current timestamp + the interval of how long we can wait before starting another audit plus 1 second.
+        // vm.roll rolls the blockchain forward to the block that you assign. So here we are only moving it up 1 block to make sure that enough time has passed to start the lottery winner picking in raffle.sol
+        vm.roll(block.number + 1);
+        // now we can call performUpkeep and this will change the state of the raffle contract from open to calculating, which should mean no one else can join.
+        raffle.performUpkeep("");
+        // Act / Assert
+        // we expect the next transaction to revert with the custom error of `Raffle__RaffleNotOpen`
+        vm.expectRevert(Raffle.Raffle__RaffleNotOpen.selector);
+        // next transaction will come from the PLAYER address that we made
+        vm.prank(PLAYER);
+        // we expect this to fail since the raffle is no longer open!
+        raffle.enterRaffle{value: entranceFee}();
     }
 }
