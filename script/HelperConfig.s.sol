@@ -58,6 +58,12 @@ contract HelperConfig is CodeConstants, Script {
         }
     }
 
+    // calls getConfigByChainId to grab the chainId of the chain we are deployed on and do the logic in getConfigByChainId
+    function getConfig() public returns (NetworkConfig memory) {
+        return getConfigByChainId(block.chainid);
+    }
+
+    // these are the items that are relevant for our raffle constructor if we are on the Sepolia Chain when we deploy.
     function getSepoliaEthConfig() public pure returns (NetworkConfig memory) {
         return NetworkConfig({
             entranceFee: 0.1 ether, // 1e16 // 16 zeros
@@ -70,15 +76,19 @@ contract HelperConfig is CodeConstants, Script {
     }
 
     function getOrCreateAnvilEthConfig() public returns (NetworkConfig memory) {
+        // if the if the vrf.coordinator address does exist on the anvil chain that we are on,
         if (localNetworkConfig.vrfCoordinatior != address(0)) {
+            // then return the all the values in the NetworkConfig struct that is has since it already exists
             return localNetworkConfig;
         }
 
+        // if the if the vrf.coordinator address does NOT exist on the anvil chain that we are on, then deploy a mock vrf.coordinator
         vm.startBroadcast();
         VRFCoordinatorV2_5Mock vrfCoordinatorMock =
             new VRFCoordinatorV2_5Mock(MOCK_BASE_FEE, MOCK_GAS_PRICE_LINK, MOCK_WEI_PER_UNIT_LINK);
         vm.stopBroadcast();
 
+        // these are the items that are relevant for our raffle constructor if we are on the Anvil Chain when we deploy.
         localNetworkConfig = NetworkConfig({
             entranceFee: 0.1 ether, // 1e16 // 16 zeros
             interval: 30, // 30 seconds
@@ -87,6 +97,7 @@ contract HelperConfig is CodeConstants, Script {
             callBackGasLimit: 500000, // 500,000 gas, but it does not matter since this is on anvil
             subscriptionId: 0
         });
+        // then return the all the values in the NetworkConfig struct when this function is called
         return localNetworkConfig;
     }
 }
