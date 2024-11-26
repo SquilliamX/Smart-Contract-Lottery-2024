@@ -8,7 +8,7 @@ import {HelperConfig} from "./HelperConfig.s.sol";
 contract DeployRaffle is Script {
     function run() public {}
 
-    function deployContracts() public returns (Raffle, HelperConfig) {
+    function deployContract() public returns (Raffle, HelperConfig) {
         // deploy a new helpconfig contract that grabs the chainid and networkConfigs
         HelperConfig helperConfig = new HelperConfig();
         // grab the network configs of the chain we are deploying to and save them as `config`.
