@@ -463,7 +463,10 @@ contract Raffle {
 ```
 
 ### Event Notes
-When a storage variable is updated, we should always emit an event. This makes migration/version-updates of contracts much easier and events make front-end "indexing" much easier. It allows for the smart contract, front-end, and blockchain to easily know when something has been updated. You can only have 3 indexed events per event and can have non indexed data. Indexed data is basically filtered data that is easy to read from the blockchain and non-indexed data will be abi-encoded on the blockchain and much much harder to read
+When a storage variable is updated, we should always emit an event. This makes migration/version-updates of contracts much easier and events make front-end "indexing" much easier. It allows for the smart contract, front-end, and blockchain to easily know when something has been updated. You can only have 3 indexed events per event and can have non indexed data. Indexed data is basically filtered data that is easy to read from the blockchain and non-indexed data will be abi-encoded on the blockchain and much much harder to read.
+
+The indexed parameter in events are called "Topics".
+
 Example:
 ```javascript
 
@@ -779,7 +782,14 @@ for example:
 
 ## Smart Contract Tests Notes
 
-All Smart Contracts must have tests. You need tests before going for a smart contract audit or you will be turned away.
+All Smart Contracts must have tests. You need tests before going for a smart contract audit or you will be turned away. 
+
+
+You can see the test coverage by running:
+ `forge coverage`: shows you how many lines of code have been tested.
+ `forge coverage --report debug`: outputs a coverage report and tells you which lines have not been tested.
+ `forge coverage --report debug > coverage.txt`: creates a coverage report/file named `coverage.txt` and it will have all the output of the terminal command `forge coverage --report debug`.
+
 
 When writing tests, following this order:
 1. Write deploy scripts to use in our tests so we can test the exact same way we are going to deploy these smart contracts
@@ -857,7 +867,6 @@ you can use `-vv`, `-vvv`, `-vvvv`, `-vvvvv` after at the end of your `forge tes
 `-vv` = console.logs
 `-vvv` = stack traces and console.logs
 `-vvvv` = more detailed stack trace, console.logs and bytes.
-`-vvvvv`=
 
 There are 4 different test types:
 1. Unit: Testing a specific part of our code
@@ -874,7 +883,7 @@ If we need to test a part of our code that is outside of our system(example: pri
 
  you only want to deploy mocks when you are working on a local chain like anvil.
 
- ### Testing Events
+### Testing Events
 
 To test an event, you need to copy and paste the events from the codebase to the test file in order to test them.
 
@@ -911,6 +920,65 @@ contract RaffleTest is Test {
 
 }
 ```
+
+
+### Tests with Custom error notes
+
+When writing a test with a custom error, you need to expect the revert with `vm.expectRevert`.
+
+Example:
+```js
+ function testRaffleEvertsWhenYouDontPayEnough() public {
+        // Arrange
+        vm.prank(PLAYER); // the next transaction will be the PLAYER address that we made
+        // Act / Assert
+        // expect the next transaction to revert with the custom error Raffle__SendMoreToEnterRaffle.
+        vm.expectRevert(Raffle.Raffle__SendMoreToEnterRaffle.selector);
+        // call the Enter Raffle with 0 value (the PLAYER is calling this and we expect it to evert since we are sending 0 value)
+        raffle.enterRaffle();
+    }
+```
+
+If the customr error has parameters, then the custom error needs to be abi.encoded and the parameters need to be apart of the error.
+Example:
+
+`Raffle.sol`:
+```js
+contract Raffle is VRFConsumerBaseV2Plus {
+    error Raffle__UpkeepNotNeeded(uint256 balance, uint256 playerslength, uint256 raffleState);
+}
+```
+`test/Raffle.t.sol`:
+```js
+   function testPerformUpkeepRevertsIfCheckUpkeepIsFalse() public {
+        // Arrange
+        // start the current balance of the raffle contract at 0 
+        uint256 currentBalance = 0;
+        // the raffle has 0 players
+        uint256 numPlayers = 0;
+        // we get the raffle state, which should be open since no one is in the raffle yet
+        Raffle.RaffleState rState = raffle.getRaffleState();
+
+        // the next transaction will be by PLAYER
+        vm.prank(PLAYER);
+        // the player enters the raffle and pays the entrance fee
+        raffle.enterRaffle{value: entranceFee}();
+        // the balance is now updated with the new entrance fee
+        currentBalance = currentBalance + entranceFee;
+        // PLAYER is the one person in the raffle
+        numPlayers = 1;
+
+        // Act / Assert
+        // we expect the next call to fail with the custom error of Raffle__UpkeepNotNeeded
+        vm.expectRevert(
+            abi.encodeWithSelector(Raffle.Raffle__UpkeepNotNeeded.selector, currentBalance, numPlayers, rState)
+        );
+        raffle.performUpkeep("");
+    }
+```
+
+
+
 
 
 
@@ -1153,7 +1221,7 @@ contract DeployRaffle is Script {
             // we do `config.` before each one because our helperConfig contract grabs the correct config dependent on the chain we are deploying to
             config.entranceFee,
             config.interval,
-            config.vrfCoordinatior,
+            config.vrfCoordinator,
             config.gasLane,
             config.subscriptionId,
             config.callBackGasLimit
@@ -1201,7 +1269,7 @@ contract HelperConfig is CodeConstants, Script {
     struct NetworkConfig {
         uint256 entranceFee;
         uint256 interval;
-        address vrfCoordinatior;
+        address vrfCoordinator;
         bytes32 gasLane;
         uint32 callBackGasLimit;
         uint256 subscriptionId;
@@ -1220,7 +1288,7 @@ contract HelperConfig is CodeConstants, Script {
 
     function getConfigByChainId(uint256 chainId) public returns (NetworkConfig memory) {
         // if the if the vrf.coordinator address does exist on the chain we are on,
-        if (networkConfigs[chainId].vrfCoordinatior != address(0)) {
+        if (networkConfigs[chainId].vrfCoordinator != address(0)) {
             // then return the all the values in the NetworkConfig struct
             return networkConfigs[chainId];
             // if we are on the local chain, return the getOrCreateAnvilEthConfig() function
@@ -1242,7 +1310,7 @@ contract HelperConfig is CodeConstants, Script {
         return NetworkConfig({
             entranceFee: 0.1 ether, // 1e16 // 16 zeros
             interval: 30, // 30 seconds
-            vrfCoordinatior: 0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B, // got this from the chainlink docs here: https://docs.chain.link/vrf/v2-5/supported-networks
+            vrfCoordinator: 0x9DdfaCa8183c41ad55329BdeeD9F6A8d53168B1B, // got this from the chainlink docs here: https://docs.chain.link/vrf/v2-5/supported-networks
             gasLane: 0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae, // // got this keyhash from the chainlink docs here: https://docs.chain.link/vrf/v2-5/supported-networks
             callBackGasLimit: 500000, // 500,000 gas
             subscriptionId: 0
@@ -1251,7 +1319,7 @@ contract HelperConfig is CodeConstants, Script {
 
     function getOrCreateAnvilEthConfig() public returns (NetworkConfig memory) {
         // if the if the vrf.coordinator address does exist on the anvil chain that we are on,
-        if (localNetworkConfig.vrfCoordinatior != address(0)) {
+        if (localNetworkConfig.vrfCoordinator != address(0)) {
             // then return the all the values in the NetworkConfig struct that is has since it already exists
             return localNetworkConfig;
         }
@@ -1266,7 +1334,7 @@ contract HelperConfig is CodeConstants, Script {
         localNetworkConfig = NetworkConfig({
             entranceFee: 0.1 ether, // 1e16 // 16 zeros
             interval: 30, // 30 seconds
-            vrfCoordinatior: address(vrfCoordinatorMock), // the address of the vrfCoordinatorMock
+            vrfCoordinator: address(vrfCoordinatorMock), // the address of the vrfCoordinatorMock
             gasLane: 0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae, // does not matter since this is on anvil
             callBackGasLimit: 500000, // 500,000 gas, but it does not matter since this is on anvil
             subscriptionId: 0
@@ -1740,6 +1808,13 @@ contract Raffle is VRFConsumerBaseV2Plus {
     function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) internal override {}
 }
 ```
+
+11. After you have done all the steps above, you need to get a subscription ID. This way only you will have access to your subscription ID and no one else can use it.
+Example:
+```js
+
+```
+
 
 ### Chainlink Automation (Custom Logic) Notes 
 
