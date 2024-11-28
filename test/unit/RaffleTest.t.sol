@@ -19,7 +19,7 @@ contract RaffleTest is Test {
 
     uint256 entranceFee;
     uint256 interval;
-    address vrfCoordinatior;
+    address vrfCoordinator;
     bytes32 gasLane;
     uint32 callBackGasLimit;
     uint256 subscriptionId;
@@ -37,7 +37,7 @@ contract RaffleTest is Test {
         // initializing the variables from the constructor dependent on the chain that we are on.
         entranceFee = config.entranceFee;
         interval = config.interval;
-        vrfCoordinatior = config.vrfCoordinatior;
+        vrfCoordinator = config.vrfCoordinator;
         gasLane = config.gasLane;
         callBackGasLimit = config.callBackGasLimit;
         subscriptionId = config.subscriptionId;
@@ -104,5 +104,38 @@ contract RaffleTest is Test {
         vm.prank(PLAYER);
         // we expect this to fail since the raffle is no longer open!
         raffle.enterRaffle{value: entranceFee}();
+    }
+
+    /* CHECK UPKEEP */
+
+    function testCheckUpkeepReturnsFalseIfItHasNoBalance() public {
+        // vm.warp allows us to warp time ahead so that foundry knows time has passed.
+        vm.warp(block.timestamp + interval + 1); // current timestamp + the interval of how long we can wait before starting another audit plus 1 second.
+        // vm.roll rolls the blockchain forward to the block that you assign. So here we are only moving it up 1 block to make sure that enough time has passed to start the lottery winner picking in raffle.sol
+        vm.roll(block.number + 1);
+        // calling checkUpkeep in the raffle contract and grabbing its true or false state.
+        (bool upkeepNeeded,) = raffle.checkUpkeep("");
+        // asserting the checkUpkeep is false/ is not needed
+        assert(!upkeepNeeded);
+    }
+
+    function testCheckUpkeepReturnsFalseIfRaffleIsntOpen() public {
+        // Arrange
+        // next transaction will come from the PLAYER address that we made
+        vm.prank(PLAYER);
+        // PLAYER pays the entrance fee and enters the raffle
+        raffle.enterRaffle{value: entranceFee}();
+        // vm.warp allows us to warp time ahead so that foundry knows time has passed.
+        vm.warp(block.timestamp + interval + 1); // current timestamp + the interval of how long we can wait before starting another audit plus 1 second.
+        // vm.roll rolls the blockchain forward to the block that you assign. So here we are only moving it up 1 block to make sure that enough time has passed to start the lottery winner picking in raffle.sol
+        vm.roll(block.number + 1);
+        // now we can call performUpkeep and this will change the state of the raffle contract from open to calculating, which should mean no one else can join.
+        raffle.performUpkeep("");
+
+        // Act
+        (bool upkeepNeeded,) = raffle.checkUpkeep("");
+
+        // Assert
+        assert(!upkeepNeeded);
     }
 }
