@@ -36,6 +36,7 @@ pragma solidity 0.8.19;
 import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFConsumerBaseV2Plus.sol";
 import {VRFV2PlusClient} from
     "../lib/chainlink-brownie-contracts/contracts/src/v0.8/vrf/dev/libraries/VRFV2PlusClient.sol";
+import {AutomationCompatibleInterface} from "@chainlink/contracts/src/v0.8/interfaces/AutomationCompatibleInterface.sol";
 
 // inheriting the Chainlink VRF
 contract Raffle is VRFConsumerBaseV2Plus {
@@ -67,7 +68,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
     // @dev the duration of the lottery in seconds.
     uint256 private immutable i_interval;
     // the amount of gas we are willing to send for the chainlink VRF
-    bytes32 private immutable i_keyHash;
+    bytes32 private immutable i_gasLane;
     // kinda linke the serial number for the request to Chainlink VRF
     uint256 private immutable i_subscriptionId;
     // Max amount of gas you are willing to spend when the VRF sends the RNG back to you
@@ -94,6 +95,9 @@ contract Raffle is VRFConsumerBaseV2Plus {
     // event happens when a winner is picked!
     event WinnerPicked(address indexed winner);
 
+    // an event is triggered when `performUpkeep` is called (performUpkeep gets a randomNumber to choose the winner assigned at the random number's index in the array)
+    event RequestedRaffleWinner(uint256 indexed requestId);
+
     constructor(
         uint256 entranceFee,
         uint256 interval,
@@ -107,7 +111,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
         // interval gets set in the deployment script(when the contract is being deployed).
         i_interval = interval;
         // keyHash to chainlink means the amount of max gas we are willing to pay. So we named it gasLane because we like gasLane as the name more
-        i_keyHash = gasLane;
+        i_gasLane = gasLane;
         // sets i_subscriptionId equal to the one set at deployment
         i_subscriptionId = subscriptionId;
         // Max amount of gas you are willing to spend when the VRF sends the RNG back to you
@@ -164,7 +168,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
         )
     {
         // this checks to see if enough time has passed
-        bool timHasPassed = ((block.timestamp - s_lastTimeStamp) >= i_interval);
+        bool timeHasPassed = ((block.timestamp - s_lastTimeStamp) >= i_interval);
         // the state of the raffle changes to open so players can join again.
         bool isOpen = s_raffleState == RaffleState.OPEN;
         // checks that this raffle contract has some money in it
@@ -172,7 +176,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
         // checks there is at least 1 player
         bool hasPlayers = s_players.length > 0;
         // if all the above booleans are true, then upkeepNeeded will be set to true as well.
-        upkeepNeeded = timHasPassed && isOpen && hasBalance && hasPlayers;
+        upkeepNeeded = timeHasPassed && isOpen && hasBalance && hasPlayers;
         // when this contract is called it will return whether or not upkeepNeeded is true or not. it will also return the performData but we are not using performData in this function so it is an empty string.
         return (upkeepNeeded, "");
     } // - chainlink nodes will call this function non-stop, and when it returns true, it will call performUpkeep.
@@ -196,7 +200,7 @@ contract Raffle is VRFConsumerBaseV2Plus {
         // calling to Chainlink VRF to get a randomNumber
         uint256 requestId = s_vrfCoordinator.requestRandomWords(
             VRFV2PlusClient.RandomWordsRequest({
-                keyHash: i_keyHash, // how much gas you are willing to pay
+                keyHash: i_gasLane, // how much gas you are willing to pay
                 subId: i_subscriptionId, // kinda of like a serial number for the request
                 requestConfirmations: REQUEST_CONFIRMATIONS, // how many blocks the VRF should wait before sending us the random number
                 callbackGasLimit: i_callbackGasLimit, // Max amount of gas you are willing to spend when the VRF sends the RNG back to you
@@ -207,6 +211,8 @@ contract Raffle is VRFConsumerBaseV2Plus {
                 )
             })
         );
+        // this event is redundant because the chainlink VRF emits an event already. but we are going to keep it to run tests on it.
+        emit RequestedRaffleWinner(requestId);
     }
 
     function fulfillRandomWords(uint256 requestId, uint256[] calldata randomWords) internal override {

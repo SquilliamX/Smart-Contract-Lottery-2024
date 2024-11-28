@@ -92,6 +92,8 @@ contract HelperConfig is CodeConstants, Script {
         VRFCoordinatorV2_5Mock vrfCoordinatorMock =
             new VRFCoordinatorV2_5Mock(MOCK_BASE_FEE, MOCK_GAS_PRICE_LINK, MOCK_WEI_PER_UNIT_LINK);
         LinkToken linkToken = new LinkToken();
+        uint256 subscriptionId = vrfCoordinatorMock.createSubscription();
+
         vm.stopBroadcast();
 
         // these are the items that are relevant for our raffle constructor if we are on the Anvil Chain when we deploy.
@@ -101,7 +103,7 @@ contract HelperConfig is CodeConstants, Script {
             vrfCoordinator: address(vrfCoordinatorMock), // the address of the vrfCoordinatorMock
             gasLane: 0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae, // does not matter since this is on anvil
             callBackGasLimit: 500000, // 500,000 gas, but it does not matter since this is on anvil
-            subscriptionId: 0,
+            subscriptionId: subscriptionId,
             link: address(linkToken) // (chain)LINK token address
         });
         // then return the all the values in the NetworkConfig struct when this function is called
