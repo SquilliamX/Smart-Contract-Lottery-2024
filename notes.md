@@ -66,6 +66,62 @@ function exampleCEI() public {
  ```
 
 
+### Modifier Notes:
+
+Sometimes you will type alot of the same code over and over. To keep things simple and non-redundant, you can use a modifier.
+
+Modifiers are written with a `_;` before/after the code logic. The `_;` means to execute the code before or after the modifier code logic. The modifier will always execute first in the code function so `_;` represents whether to execute the function logic before or after the modifier.
+example:
+```js
+ modifier raffleEntered() {
+        vm.prank(PLAYER);
+        // PLAYER pays the entrance fee and enters the raffle
+        raffle.enterRaffle{value: entranceFee}();
+        // vm.warp allows us to warp time ahead so that foundry knows time has passed.
+        vm.warp(block.timestamp + interval + 1); // current timestamp + the interval of how long we can wait before starting another audit plus 1 second.
+        // vm.roll rolls the blockchain forward to the block that you assign. So here we are only moving it up 1 block to make sure that enough time has passed to start the lottery winner picking in raffle.sol
+        vm.roll(block.number + 1);
+        // completes the rest of the function that this modifier is applied to
+        _;
+    }
+```
+In this example the `_;` is after the modifier code logic to say that the modifier should be executed first, then the function it is applied to's logic should be execute afterwards. If the `_;` was before the modifier code logic, then it whould mean to execute the function it is applied to's logic before the modifier and then do the modifier logic afterwards 
+
+
+Modifiers go after the visibility modifiers in the function declaration. 
+example:
+```js
+ function testPerformUpkeepUpdatesRafflesStateAndEmitsRequestId() public raffleEntered {
+        // Act
+        // record all logs(including event data) from the next call
+        vm.recordLogs();
+        // call performUpkeep
+        raffle.performUpkeep("");
+        // take the recordedLogs from `performUpkeep` and stick them into the entries array
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        // entry 0  is for the VRF coordinator
+        // entry 1 is for our event data
+        // topic 0 is always resevered for
+        // topic 1 is for our indexed parameter
+        bytes32 requestId = entries[1].topics[1];
+
+        // Assert
+        // gets the raffleState and saves it in a variable named raffleState
+        Raffle.RaffleState raffleState = raffle.getRaffleState();
+        // assert that the requestId was indeed sent, if it was zero then no request Id was sent.
+        assert(uint256(requestId) > 0);
+        // this is asserting that the raffle state is `calculating` instead of `OPEN`
+        assert(uint256(raffleState) == 1);
+        // this is the same as saying what is below:
+        // assert(raffleState == Raffle.RaffleState.CALCULATING);
+        //         enum RaffleState {
+        //     OPEN,      // index 0
+        //     CALCULATING // index 1
+        // }
+    }
+```
+In this example, the modifier is `raffleEntered`. 
+
 ### Visibility Modifier Notes: 
 
 There are 4 types of visibility modifiers in solidity. Public, Private, External, Internal.

@@ -196,8 +196,7 @@ contract RaffleTest is Test, CodeConstants {
         raffle.performUpkeep("");
     }
 
-    function testPerformUpkeepUpdatesRafflesStateAndEmitsRequestId() public {
-        // Arrange
+    modifier raffleEntered() {
         vm.prank(PLAYER);
         // PLAYER pays the entrance fee and enters the raffle
         raffle.enterRaffle{value: entranceFee}();
@@ -205,7 +204,11 @@ contract RaffleTest is Test, CodeConstants {
         vm.warp(block.timestamp + interval + 1); // current timestamp + the interval of how long we can wait before starting another audit plus 1 second.
         // vm.roll rolls the blockchain forward to the block that you assign. So here we are only moving it up 1 block to make sure that enough time has passed to start the lottery winner picking in raffle.sol
         vm.roll(block.number + 1);
+        // completes the rest of the function that this modifier is applied to
+        _;
+    }
 
+    function testPerformUpkeepUpdatesRafflesStateAndEmitsRequestId() public raffleEntered {
         // Act
         // record all logs(including event data) from the next call
         vm.recordLogs();
