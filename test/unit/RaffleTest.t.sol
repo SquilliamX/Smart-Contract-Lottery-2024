@@ -241,7 +241,8 @@ contract RaffleTest is Test, CodeConstants {
 
     // unit test:
     // function testFulfillRandomWordsCanOnlyBeCalledAfterPerformUpkeep() public raffleEntered {
-    //     // we expect the following call to revert with the error of `VRFCoordinatorV2_5Mock`;
+    //      // Arrange / Act / Assert
+    // we expect the following call to revert with the error of `VRFCoordinatorV2_5Mock`;
     //     vm.expectRevert(VRFCoordinatorV2_5Mock.InvalidRequest.selector);
     //     // we call fulfillRandomWords from our vrfCoordinator (vrfCoordinator is of type mock since we are on anvil) and pass the requestId(we pick a random one) and consumer(our raffle contract is the consumer since the raffle is the one using/consuming the random number generated)
     //     // but wait! since we are only testing 1 random requestId, we need to check every requestId to make sure this is good! But the requestIds are infinite, so how can we test for this?! Answer: Fuzz testing!!!
@@ -250,8 +251,66 @@ contract RaffleTest is Test, CodeConstants {
 
     // Fuzz test:
     function testFulfillRandomWordsCanOnlyBeCalledAfterPerformUpkeep(uint256 randomRequestId) public raffleEntered {
+        // Arrange / Act / Assert
         // we expect the following call to revert with the error of `VRFCoordinatorV2_5Mock`;
         vm.expectRevert(VRFCoordinatorV2_5Mock.InvalidRequest.selector);
         VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(randomRequestId, address(raffle));
+    }
+
+    function testFulfillrandomwordsPicksAWinnerResetsAndSendsMoney() public raffleEntered {
+        // Arrange
+        uint256 additionalEntrances = 3; // so 4 people total since the raffleEntered modifier has PLAYER enter the raffle first.
+        uint256 startingIndex = 1;
+        address expectedWinner = address(1);
+
+        for (uint256 i = startingIndex; i < startingIndex + additionalEntrances; i++) {
+            // this is a way to turn any uint into an address. this is like saying address(1)
+            address newPlayer = address(uint160(i));
+            // gives newPlayer ether and makes the next transaction come from NewPlayer. `hoax` is a cheatcode that combines vm.deal and vm.prank. Hoax only works with uint160s.
+            hoax(newPlayer, 1 ether);
+            // newPlayer enters raffle
+            raffle.enterRaffle{value: entranceFee}();
+        }
+        // get the timestamp of when the contract was deployed
+        uint256 startingTimeStamp = raffle.getLastTimeStamp();
+        uint256 winnerStartingBalance = expectedWinner.balance;
+
+        // Act
+        // record all logs(including event data) from the next call
+        vm.recordLogs();
+        // call performUpkeep
+        raffle.performUpkeep("");
+        // take the recordedLogs from `performUpkeep` and stick them into the entries array
+        Vm.Log[] memory entries = vm.getRecordedLogs();
+        // entry 0  is for the VRF coordinator
+        // entry 1 is for our event data
+        // topic 0 is always resevered for
+        // topic 1 is for our indexed parameter
+        bytes32 requestId = entries[1].topics[1];
+        // call fulfillRandomWords from the vrfCoordinator and we are inputting the requestId that we got from the logs when we called performUpkeep; and we are also inputting the raffle contract since its the consumer(fulfillRandomWords function takes parameters from the VRFCoordinatorV2_5Mock ).
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(uint256(requestId), address(raffle)); // we typecast the requestId back into a uint256 since it was stored as bytes
+        // Assert
+        // saving the recent winner from the getter function in raffle.sol to a variable named recentWinner
+        address recentWinner = raffle.getRecentWinner();
+        // saving the raffleState from the getter function in raffle.sol to a variable type RaffleState named raffleState
+        Raffle.RaffleState raffleState = raffle.getRaffleState();
+        // saves the balance of the recentWinner to a variable named winnerBalance
+        uint256 winnerBalance = recentWinner.balance; // `balance` is a solidity keyword
+        // fulfillRandomWords updates the timestamp in raffle.sol, so by calling getLastTimeStamp here, we get the new timeStamp that was saved.
+        uint256 endingTimeStamp = raffle.getLastTimeStamp();
+        // since there is 4 people in this raffle, it muliplies the number of players times their entrance fee to get how much the prize is worth.
+        uint256 prize = entranceFee * (additionalEntrances + 1);
+
+        // Assert
+
+        assert(recentWinner == expectedWinner);
+        // assert that the raffle restarted
+        assert(raffleState == Raffle.RaffleState.OPEN);
+        // assert(uint256(raffleState) == 0); // This is the same as the line above since `OPEN` in index 0 of the enum in Raffle.sol.
+
+        // assert that the winners received the funds/prize
+        assert(winnerBalance == winnerStartingBalance + prize);
+
+        assert(endingTimeStamp > startingTimeStamp);
     }
 }

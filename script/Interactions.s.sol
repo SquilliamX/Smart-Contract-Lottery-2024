@@ -73,7 +73,7 @@ contract FundSubscription is Script, CodeConstants {
             // everything between startBroadcast and stopBroadcast will be broadcasted to the blockchain.
             vm.startBroadcast();
             // call the fundSubscription function with the subscriptionId and the value amount. This
-            VRFCoordinatorV2_5Mock(vrfCoordinator).fundSubscription(subscriptionId, FUND_AMOUNT);
+            VRFCoordinatorV2_5Mock(vrfCoordinator).fundSubscription(subscriptionId, FUND_AMOUNT * 100);
             vm.stopBroadcast();
         } else {
             // everything between startBroadcast and stopBroadcast will be broadcasted to the blockchain.
