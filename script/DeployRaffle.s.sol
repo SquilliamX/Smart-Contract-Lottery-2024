@@ -4,10 +4,12 @@ pragma solidity 0.8.19;
 import {Script} from "forge-std/Script.sol";
 import {Raffle} from "../src/Raffle.sol";
 import {HelperConfig} from "./HelperConfig.s.sol";
-import {CreateSubscription} from "./Interactions.s.sol";
+import {CreateSubscription, FundSubscription, AddConsumer} from "./Interactions.s.sol";
 
 contract DeployRaffle is Script {
-    function run() public {}
+    function run() public {
+        deployContract();
+    }
 
     function deployContract() public returns (Raffle, HelperConfig) {
         // deploy a new helpconfig contract that grabs the chainid and networkConfigs
@@ -23,6 +25,11 @@ contract DeployRaffle is Script {
             // calls the createSubscription contract's createSubscription function and passes the vrfCoordinator from the networkConfigs dependent on the chain we are on. This will create a subscription for our vrfCoordinator. Then we save the return values of the subscriptionId and vrfCoordinator and vrfCoordinator as the subscriptionId and values in our networkConfig.
             (config.subscriptionId, config.vrfCoordinator) =
                 createSubscription.createSubscription(config.vrfCoordinator);
+
+            // creates and deploys a new FundSubscription contract from the Interactions.s.sol file.
+            FundSubscription fundSubscription = new FundSubscription();
+            // calls the `fundSubscription` function from the FundSubscription contract we just created and pass the parameters that it takes.
+            fundSubscription.fundSubscription(config.vrfCoordinator, config.subscriptionId, config.link);
         }
 
         // everything between startBroadcast and stopBroadcast is broadcasted to a real chain
@@ -38,6 +45,12 @@ contract DeployRaffle is Script {
             config.callBackGasLimit
         );
         vm.stopBroadcast();
+
+        // creates and deploys a new AddConsumer contract from the Interactions.s.sol file.
+        AddConsumer addConsumer = new AddConsumer();
+        // calls the `addConsumer` function from the `AddConsumer` contract we just created/deplyed and pass the parameters that it takes.
+        addConsumer.addConsumer(address(raffle), config.vrfCoordinator, config.subscriptionId);
+
         // returns the new raffle and helperconfig that we just defined and deployed so that these new values can be used when this function `deployContracts` is called
         return (raffle, helperConfig);
     }
