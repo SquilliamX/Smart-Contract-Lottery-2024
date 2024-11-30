@@ -1609,6 +1609,18 @@ example: the hex data returned is: `0x000000000000000000000000000000000000000000
 
 This returns the data that we submitted of `123`. (NOTE: This returns the data we submitted because it is the only data submitted and the contract function "retrieve" is written to return the most recent number.)
 
+### CAST SIG NOTES
+
+When interacting with a contract on the internet from metamask, metamask will prompt you with a confirm transaction. In this confirm window on metamask, it will tell you what function you are calling at the top of the window and there will be a `HEX DATA: 4 BYTES` section at the bottom of the window that has the function selector hex data of the function you are calling.
+
+In your terminal, if you run `cast sig "<function-Name>()" ` and it will return the hex data so we can make sure it is the same hex data as the function we are calling in our transaction to make sure it is calling the correct function and we are not getting scammed.
+Example:
+```js
+/* (Command): */ cast sig "createSubscription()"
+/* (Terminal returns): */ 0xa21a23e4
+```
+
+Sometimes you will not know what the function's hex is. But there are function signature databases that we can use (like `openChain.xyz` and we go to signature database). If you paste in the function selector/ hex data and press search, it has a database of different hashes/hex data and the name of the function associated with it. So this way we can see what hex data is associated with what functions. These databases only work if someone actually updates them. Foundry has a way to automatically update these databases (Check foundry docs).
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -1866,8 +1878,217 @@ contract Raffle is VRFConsumerBaseV2Plus {
 ```
 
 11. After you have done all the steps above, you need to get a subscription ID. This way only you will have access to your subscription ID and no one else can use it.
-Example:
+
+To do this you need to Create the Subscription, Fund the subscription, then add a consumer.
+
+Creating the Subscription:
+example (from: `foundry-smart-contract-lottery-f23/Interactions.s.sol`):
+```js 
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.19;
+
+import {Script, console} from "forge-std/Script.sol";
+import {HelperConfig, CodeConstants} from "./HelperConfig.s.sol";
+import {VRFCoordinatorV2_5Mock} from
+    "../lib/chainlink-brownie-contracts/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2_5Mock.sol";
+import {LinkToken} from "../test/mocks/LinkToken.sol";
+import {DevOpsTools} from "foundry-devops/src/DevOpsTools.sol";
+
+// to use chainLink VRF, we need to create a subscription so that we are the only ones that can call our vrf.
+// this is how you do it programically.
+
+// we made this interactions file because it makes our codebase more modular and if we want to create more subscriptions in the future, we can do it right from the command line
+
+contract CreateSubscription is Script {
+    function createSubscriptionUsingConfig() public returns (uint256, address) {
+        // deploys a new helperConfig contract so we can interact with it
+        HelperConfig helperConfig = new HelperConfig();
+        // calls `getConfig` function from HelperConfig contract, this returns the networkConfigs struct, by but doing `getConfig().vrfCoordinator` it only grabs the vrfCoordinator from the struct. Then we save it as a variable named vrfCoordinator in this contract
+        address vrfCoordinator = helperConfig.getConfig().vrfCoordinator;
+        // runs the createSubscription with the `vrfCoordinator` that we just saved as the parameter address and saves the return values of subId.
+        (uint256 subId,) = createSubscription(vrfCoordinator);
+
+        return (subId, vrfCoordinator);
+    }
+
+    // created another function so that it can be even more modular
+    function createSubscription(address vrfCoordinator) public returns (uint256, address) {
+        console.log("Creating Subscription on chain Id:", block.chainid);
+        // everything between startBroadcast and stopBroadcast will be broadcasted to the blockchain.
+        vm.startBroadcast();
+        // VRFCoordinatorV2_5Mock inherits from SubscriptionAPI.sol where the createSubscription lives
+        // calls the VRFCoordinatorV2_5Mock contract with the vrfCoordinator as the input parameter and calls the createSubscription function within the VRFCoordinatorV2_5Mock contract.
+        uint256 subId = VRFCoordinatorV2_5Mock(vrfCoordinator).createSubscription();
+        vm.stopBroadcast();
+
+        console.log("Your subscription Id is: ", subId);
+        console.log("Please update the subscription Id in your HelperConfig.s.sol");
+
+        return (subId, vrfCoordinator);
+    }
+
+    function run() public {
+        createSubscriptionUsingConfig();
+    }
+}
+```
+
+Funding the Subscription:
+example (from `foundry-smart-contract-lottery-f23/Interactions.s.sol`):
 ```js
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.19;
+
+import {Script, console} from "forge-std/Script.sol";
+import {HelperConfig, CodeConstants} from "./HelperConfig.s.sol";
+import {VRFCoordinatorV2_5Mock} from
+    "../lib/chainlink-brownie-contracts/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2_5Mock.sol";
+import {LinkToken} from "../test/mocks/LinkToken.sol";
+import {DevOpsTools} from "foundry-devops/src/DevOpsTools.sol";
+
+
+contract FundSubscription is Script, CodeConstants {
+    // this says ether, but it really is (chain)LINK, since there are 18 decimals in the (CHAIN)LINK token as well
+    uint256 public constant FUND_AMOUNT = 3 ether;
+
+    function fundSubscriptionUsingConfig() public {
+        // deploys a new helperConfig contract so we can interact with it
+        HelperConfig helperConfig = new HelperConfig();
+        // calls `getConfig` function from HelperConfig contract, this returns the networkConfigs struct, by but doing `getConfig().vrfCoordinator` it only grabs the vrfCoordinator from the struct. Then we save it as a variable named vrfCoordinator in this contract
+        address vrfCoordinator = helperConfig.getConfig().vrfCoordinator;
+        // in our DeployRaffle, we are updating the subscriptionId with the new subscription id we are generating. Here, we call the subscriptionId that we are updating the network configs with(in the deployment script).
+        uint256 subscriptionId = helperConfig.getConfig().subscriptionId;
+        // calls the getConfig function from helperConfig and gets the link address and saves it as a variable named linkToken
+        address linkToken = helperConfig.getConfig().link;
+        // runs `fundSubscription` function (below) and inputs the following parameters (we just defined these variables in this function)
+        fundSubscription(vrfCoordinator, subscriptionId, linkToken);
+    }
+
+    function fundSubscription(address vrfCoordinator, uint256 subscriptionId, address linkToken) public {
+        console.log("Funding subscription: ", subscriptionId);
+        console.log("Using vrfCoordinator: ", vrfCoordinator);
+        console.log("On Chain: ", block.chainid);
+
+        // if we are on Anvil (local fake blockchain) then deploy a mock and pass it our vrfCoordinator address
+        if (block.chainid == LOCAL_CHAIN_ID) {
+            // everything between startBroadcast and stopBroadcast will be broadcasted to the blockchain.
+            vm.startBroadcast();
+            // call the fundSubscription function with the subscriptionId and the value amount. This
+            VRFCoordinatorV2_5Mock(vrfCoordinator).fundSubscription(subscriptionId, FUND_AMOUNT);
+            vm.stopBroadcast();
+        } else {
+            // everything between startBroadcast and stopBroadcast will be broadcasted to the blockchain.
+            vm.startBroadcast();
+            // otherwise, if we are on a real blockchain call `transferAndCall` function from the link token contract and pass the vrfCoordinator address, the value amount we are funding it with and encode our subscriptionID so no one else sees it.
+            LinkToken(linkToken).transferAndCall(vrfCoordinator, FUND_AMOUNT, abi.encode(subscriptionId));
+            vm.stopBroadcast();
+        }
+    }
+
+    function run() public {
+        fundSubscriptionUsingConfig();
+    }
+}
+```
+
+Adding Consumer:
+First install foundry devops with `forge install Cyfrin/foundry-devops --no-commit` (or whatever the installtion says in https://github.com/Cyfrin/foundry-devops ).
+
+Then we need to update the `foundry.toml` file to have read permissions on the broadcast folder.
+example (from `foundry-smart-contract-lottery-f23/foundry.toml`):
+```js
+contract AddConsumer is Script {
+    function addConsumerUsingConfig(address mostRecentlyDeployed) public {
+        // deploys a new helperConfig contract so we can interact with it
+        HelperConfig helperConfig = new HelperConfig();
+        // calls for the `subscriptionId` from the networkConfigs struct that getConfig returns from the HelperConfig contract
+        uint256 subId = helperConfig.getConfig().subscriptionId;
+        // calls for the `vrfCoordinator` from the networkConfigs struct that getConfig returns from the HelperConfig contract
+        address vrfCoordinator = helperConfig.getConfig().vrfCoordinator;
+        // calls `addConsumer` and passes the mostRecentlyDeployed, vrfCoordinator, subId as parameters. we just identified `vrfCoordinator` and `subId`. `mostRecentlyDeployed` get passed in when the run function is called.
+        addConsumer(mostRecentlyDeployed, vrfCoordinator, subId);
+    }
+
+    function addConsumer(address contractToAddToVrf, address vrfCoordinator, uint256 subId) public {
+        console.log("Adding consumer contract: ", contractToAddToVrf);
+        console.log("To vrfCoordinator: ", vrfCoordinator);
+        console.log("On ChainId: ", block.chainid);
+        // everything between startBroadcast and stopBroadcast will be broadcasted to the blockchain.
+        vm.startBroadcast();
+        // calls `addConsumer` from the `VRFCoordinatorV2_5Mock` and it takes the parameters of the subId and consumer (so we pass the subId and contractToAddToVrf.)
+        VRFCoordinatorV2_5Mock(vrfCoordinator).addConsumer(subId, contractToAddToVrf);
+        vm.stopBroadcast();
+    }
+
+    function run() external {
+        // calls the `get_most_recent_deployment` function from the DevOpsTools library in order to get the most recently deployed version of our Raffle smart contract.
+        address mostRecentlyDeployed = DevOpsTools.get_most_recent_deployment("Raffle", block.chainid);
+        // calls the `addConsumerUsingConfig` and passed the most recently deployed raffle contract as its parameter.
+        addConsumerUsingConfig(mostRecentlyDeployed);
+    }
+}
+```
+
+12. Then we need to add the CreateSubscription, FundSubscription and AddConsumer contracts and functions to our deploy script.
+example (from DeployRaffle.s.sol):
+```js
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.19;
+
+import {Script} from "forge-std/Script.sol";
+import {Raffle} from "../src/Raffle.sol";
+import {HelperConfig} from "./HelperConfig.s.sol";
+import {CreateSubscription, FundSubscription, AddConsumer} from "./Interactions.s.sol";
+
+contract DeployRaffle is Script {
+    function run() public {
+        deployContract();
+    }
+
+    function deployContract() public returns (Raffle, HelperConfig) {
+        // deploy a new helpconfig contract that grabs the chainid and networkConfigs
+        HelperConfig helperConfig = new HelperConfig();
+        // grab the network configs of the chain we are deploying to and save them as `config`.
+        // its also the same as doing ` HelperConfig.NetworkConfig memory config = helperConfig.getConfigByChainId(block.chainid);`
+        HelperConfig.NetworkConfig memory config = helperConfig.getConfig();
+
+        // if the subscription id does not exist, create one
+        if (config.subscriptionId == 0) {
+            // deploys a new CreateSubscription contract from Interactions.s.sol and save it as a variable named createSubscription
+            CreateSubscription createSubscription = new CreateSubscription();
+            // calls the createSubscription contract's createSubscription function and passes the vrfCoordinator from the networkConfigs dependent on the chain we are on. This will create a subscription for our vrfCoordinator. Then we save the return values of the subscriptionId and vrfCoordinator and vrfCoordinator as the subscriptionId and values in our networkConfig.
+            (config.subscriptionId, config.vrfCoordinator) =
+                createSubscription.createSubscription(config.vrfCoordinator);
+
+            // creates and deploys a new FundSubscription contract from the Interactions.s.sol file.
+            FundSubscription fundSubscription = new FundSubscription();
+            // calls the `fundSubscription` function from the FundSubscription contract we just created and pass the parameters that it takes.
+            fundSubscription.fundSubscription(config.vrfCoordinator, config.subscriptionId, config.link);
+        }
+
+        // everything between startBroadcast and stopBroadcast is broadcasted to a real chain
+        vm.startBroadcast();
+        // create a new raffle contract with the parameters that are in the Raffle's constructor. This HAVE to be in the same order as the constructor!
+        Raffle raffle = new Raffle(
+            // we do `config.` before each one because our helperConfig contract grabs the correct config dependent on the chain we are deploying to
+            config.entranceFee,
+            config.interval,
+            config.vrfCoordinator,
+            config.gasLane,
+            config.subscriptionId,
+            config.callBackGasLimit
+        );
+        vm.stopBroadcast();
+
+        // creates and deploys a new AddConsumer contract from the Interactions.s.sol file.
+        AddConsumer addConsumer = new AddConsumer();
+        // calls the `addConsumer` function from the `AddConsumer` contract we just created/deplyed and pass the parameters that it takes.
+        addConsumer.addConsumer(address(raffle), config.vrfCoordinator, config.subscriptionId);
+
+        // returns the new raffle and helperconfig that we just defined and deployed so that these new values can be used when this function `deployContracts` is called
+        return (raffle, helperConfig);
+    }
+}
 
 ```
 
