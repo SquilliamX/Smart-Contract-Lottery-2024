@@ -6,6 +6,7 @@ import {HelperConfig, CodeConstants} from "./HelperConfig.s.sol";
 import {VRFCoordinatorV2_5Mock} from
     "../lib/chainlink-brownie-contracts/contracts/src/v0.8/vrf/mocks/VRFCoordinatorV2_5Mock.sol";
 import {LinkToken} from "../test/mocks/LinkToken.sol";
+import {DevOpsTools} from "lib/foundry-devops/src/DevOpsTools.sol";
 
 // to use chainLink VRF, we need to create a subscription so that we are the only ones that can call our vrf.
 // this is how you do it programically.
@@ -45,11 +46,11 @@ contract CreateSubscription is Script {
     }
 }
 
-contract FundScription is Script, CodeConstants {
+contract FundSubscription is Script, CodeConstants {
     // this says ether, but it really is (chain)LINK, since there are 18 decimals in the (CHAIN)LINK token as well
     uint256 public constant FUND_AMOUNT = 3 ether;
 
-    function fundScriptionUsingConfig() public {
+    function fundSubscriptionUsingConfig() public {
         // deploys a new helperConfig contract so we can interact with it
         HelperConfig helperConfig = new HelperConfig();
         // calls `getConfig` function from HelperConfig contract, this returns the networkConfigs struct, by but doing `getConfig().vrfCoordinator` it only grabs the vrfCoordinator from the struct. Then we save it as a variable named vrfCoordinator in this contract
@@ -84,6 +85,37 @@ contract FundScription is Script, CodeConstants {
     }
 
     function run() public {
-        fundScriptionUsingConfig();
+        fundSubscriptionUsingConfig();
+    }
+}
+
+contract AddConsumer is Script {
+    function addConsumerUsingConfig(address mostRecentlyDeployed) public {
+        // deploys a new helperConfig contract so we can interact with it
+        HelperConfig helperConfig = new HelperConfig();
+        // calls for the `subscriptionId` from the networkConfigs struct that getConfig returns from the HelperConfig contract
+        uint256 subId = helperConfig.getConfig().subscriptionId;
+        // calls for the `vrfCoordinator` from the networkConfigs struct that getConfig returns from the HelperConfig contract
+        address vrfCoordinator = helperConfig.getConfig().vrfCoordinator;
+        // calls `addConsumer` and passes the mostRecentlyDeployed, vrfCoordinator, subId as parameters. we just identified `vrfCoordinator` and `subId`. `mostRecentlyDeployed` get passed in when the run function is called.
+        addConsumer(mostRecentlyDeployed, vrfCoordinator, subId);
+    }
+
+    function addConsumer(address contractToAddToVrf, address vrfCoordinator, uint256 subId) public {
+        console.log("Adding consumer contract: ", contractToAddToVrf);
+        console.log("To vrfCoordinator: ", vrfCoordinator);
+        console.log("On ChainId: ", block.chainid);
+        // everything between startBroadcast and stopBroadcast will be broadcasted to the blockchain.
+        vm.startBroadcast();
+        // calls `addConsumer` from the `VRFCoordinatorV2_5Mock` and it takes the parameters of the subId and consumer (so we pass the subId and contractToAddToVrf.)
+        VRFCoordinatorV2_5Mock(vrfCoordinator).addConsumer(subId, contractToAddToVrf);
+        vm.stopBroadcast();
+    }
+
+    function run() external {
+        // calls the `get_most_recent_deployment` function from the DevOpsTools library in order to get the most recently deployed version of our Raffle smart contract.
+        address mostRecentlyDeployed = DevOpsTools.get_most_recent_deployment("Raffle", block.chainid);
+        // calls the `addConsumerUsingConfig` and passed the most recently deployed raffle contract as its parameter.
+        addConsumerUsingConfig(mostRecentlyDeployed);
     }
 }
