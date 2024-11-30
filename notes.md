@@ -980,7 +980,7 @@ contract RaffleTest is Test {
 
 ### Tests with Custom error notes
 
-When writing a test with a custom error, you need to expect the revert with `vm.expectRevert`.
+When writing a test with a custom error, you need to expect the revert with `vm.expectRevert()` and you need to end it with `.selector` after the custom error.
 
 Example:
 ```js
@@ -1049,6 +1049,22 @@ contract Raffle is VRFConsumerBaseV2Plus {
 
  ### GAS INFO IN TESTS Notes
  When working on tests in anvil, the gas price defaults to 0. So for us to simulate transactions in test with actual gas prices, we need to tell our tests to actually use real gas prices. This is where `vm.txGasPrice` comes in. (See `vm.txGasPrice` below in cheatcodes for tests)
+
+ ### FUZZ TESTING NOTES
+
+ For most of your testing, ideally you do most of your tests as fuzz tests. You should always try to default all of your tests to some type of fuzz testing.
+
+ Stateless fuzz testing:
+
+ Stateful fuzz testing:
+
+Fuzz testing gets defaulted to 256 runs. To change the amount of tests foundry does in a fuzz test, in your `foundry.toml` change the runs number:
+```js
+[fuzz]
+runs = 256 // change this number
+```
+You can learn more about fuzzing (and foundry.toml commands in general) at` https://github.com/foundry-rs/foundry/tree/master/config ` and scroll down to the fuzz section.
+
 
  ### CHEATCODES FOR TESTS Notes
  `makeAddr()` : This cheatcode creates a fake address for a fake person for testing Purposes.

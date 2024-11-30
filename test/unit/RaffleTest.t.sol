@@ -236,4 +236,22 @@ contract RaffleTest is Test, CodeConstants {
         //     CALCULATING // index 1
         // }
     }
+
+    /* FULFILL_RANDOM_WORDS */
+
+    // unit test:
+    // function testFulfillRandomWordsCanOnlyBeCalledAfterPerformUpkeep() public raffleEntered {
+    //     // we expect the following call to revert with the error of `VRFCoordinatorV2_5Mock`;
+    //     vm.expectRevert(VRFCoordinatorV2_5Mock.InvalidRequest.selector);
+    //     // we call fulfillRandomWords from our vrfCoordinator (vrfCoordinator is of type mock since we are on anvil) and pass the requestId(we pick a random one) and consumer(our raffle contract is the consumer since the raffle is the one using/consuming the random number generated)
+    //     // but wait! since we are only testing 1 random requestId, we need to check every requestId to make sure this is good! But the requestIds are infinite, so how can we test for this?! Answer: Fuzz testing!!!
+    //     VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(0, address(raffle));
+    // }
+
+    // Fuzz test:
+    function testFulfillRandomWordsCanOnlyBeCalledAfterPerformUpkeep(uint256 randomRequestId) public raffleEntered {
+        // we expect the following call to revert with the error of `VRFCoordinatorV2_5Mock`;
+        vm.expectRevert(VRFCoordinatorV2_5Mock.InvalidRequest.selector);
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(randomRequestId, address(raffle));
+    }
 }
