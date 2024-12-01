@@ -33,6 +33,7 @@ contract HelperConfig is CodeConstants, Script {
         uint32 callBackGasLimit;
         uint256 subscriptionId;
         address link;
+        address account;
     }
 
     // creating a variable named localNetworkConfig of type struct NetworkConfig
@@ -76,7 +77,8 @@ contract HelperConfig is CodeConstants, Script {
             gasLane: 0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae, // // got this keyhash from the chainlink docs here: https://docs.chain.link/vrf/v2-5/supported-networks
             callBackGasLimit: 500000, // 500,000 gas
             subscriptionId: 0,
-            link: 0x779877A7B0D9E8603169DdbD7836e478b4624789 // (chain)LINK token address
+            link: 0x779877A7B0D9E8603169DdbD7836e478b4624789, // (chain)LINK token address
+            account: 0xBe3dDdB70EA16cBfd0cE0A4028902678EECDBe6D
         });
     }
 
@@ -104,7 +106,8 @@ contract HelperConfig is CodeConstants, Script {
             gasLane: 0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae, // does not matter since this is on anvil
             callBackGasLimit: 500000, // 500,000 gas, but it does not matter since this is on anvil
             subscriptionId: subscriptionId,
-            link: address(linkToken) // (chain)LINK token address
+            link: address(linkToken), // (chain)LINK token address
+            account: 0x1804c8AB1F12E6bbf3894d4083f33e07309d1f38 // foundry's default sender from lib/forge-std/src/Base.sol
         });
         // then return the all the values in the NetworkConfig struct when this function is called
         return localNetworkConfig;

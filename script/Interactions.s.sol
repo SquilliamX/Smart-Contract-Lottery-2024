@@ -19,17 +19,18 @@ contract CreateSubscription is Script {
         HelperConfig helperConfig = new HelperConfig();
         // calls `getConfig` function from HelperConfig contract, this returns the networkConfigs struct, by but doing `getConfig().vrfCoordinator` it only grabs the vrfCoordinator from the struct. Then we save it as a variable named vrfCoordinator in this contract
         address vrfCoordinator = helperConfig.getConfig().vrfCoordinator;
+        address account = helperConfig.getConfig().account;
         // runs the createSubscription with the `vrfCoordinator` that we just saved as the parameter address and saves the return values of subId.
-        (uint256 subId,) = createSubscription(vrfCoordinator);
+        (uint256 subId,) = createSubscription(vrfCoordinator, account);
 
         return (subId, vrfCoordinator);
     }
 
     // created another function so that it can be even more modular
-    function createSubscription(address vrfCoordinator) public returns (uint256, address) {
+    function createSubscription(address vrfCoordinator, address account) public returns (uint256, address) {
         console.log("Creating Subscription on chain Id:", block.chainid);
-        // everything between startBroadcast and stopBroadcast will be broadcasted to the blockchain.
-        vm.startBroadcast();
+        // everything between startBroadcast and stopBroadcast will be broadcasted to the blockchain and from the account that is passed into it.
+        vm.startBroadcast(account);
         // VRFCoordinatorV2_5Mock inherits from SubscriptionAPI.sol where the createSubscription lives
         // calls the VRFCoordinatorV2_5Mock contract with the vrfCoordinator as the input parameter and calls the createSubscription function within the VRFCoordinatorV2_5Mock contract.
         uint256 subId = VRFCoordinatorV2_5Mock(vrfCoordinator).createSubscription();
@@ -59,11 +60,15 @@ contract FundSubscription is Script, CodeConstants {
         uint256 subscriptionId = helperConfig.getConfig().subscriptionId;
         // calls the getConfig function from helperConfig and gets the link address and saves it as a variable named linkToken
         address linkToken = helperConfig.getConfig().link;
+        //
+        address account = helperConfig.getConfig().account;
         // runs `fundSubscription` function (below) and inputs the following parameters (we just defined these variables in this function)
-        fundSubscription(vrfCoordinator, subscriptionId, linkToken);
+        fundSubscription(vrfCoordinator, subscriptionId, linkToken, account);
     }
 
-    function fundSubscription(address vrfCoordinator, uint256 subscriptionId, address linkToken) public {
+    function fundSubscription(address vrfCoordinator, uint256 subscriptionId, address linkToken, address account)
+        public
+    {
         console.log("Funding subscription: ", subscriptionId);
         console.log("Using vrfCoordinator: ", vrfCoordinator);
         console.log("On Chain: ", block.chainid);
@@ -76,8 +81,8 @@ contract FundSubscription is Script, CodeConstants {
             VRFCoordinatorV2_5Mock(vrfCoordinator).fundSubscription(subscriptionId, FUND_AMOUNT * 100);
             vm.stopBroadcast();
         } else {
-            // everything between startBroadcast and stopBroadcast will be broadcasted to the blockchain.
-            vm.startBroadcast();
+            // everything between startBroadcast and stopBroadcast will be broadcasted to the blockchain and the account passed in will be the one making the transactions.
+            vm.startBroadcast(account);
             // otherwise, if we are on a real blockchain call `transferAndCall` function from the link token contract and pass the vrfCoordinator address, the value amount we are funding it with and encode our subscriptionID so no one else sees it.
             LinkToken(linkToken).transferAndCall(vrfCoordinator, FUND_AMOUNT, abi.encode(subscriptionId));
             vm.stopBroadcast();
@@ -97,16 +102,18 @@ contract AddConsumer is Script {
         uint256 subId = helperConfig.getConfig().subscriptionId;
         // calls for the `vrfCoordinator` from the networkConfigs struct that getConfig returns from the HelperConfig contract
         address vrfCoordinator = helperConfig.getConfig().vrfCoordinator;
+        // calls for the `account` from the networkConfigs struct that getConfig returns from the HelperConfig contract and saves it as an a variable named account.
+        address account = helperConfig.getConfig().account;
         // calls `addConsumer` and passes the mostRecentlyDeployed, vrfCoordinator, subId as parameters. we just identified `vrfCoordinator` and `subId`. `mostRecentlyDeployed` get passed in when the run function is called.
-        addConsumer(mostRecentlyDeployed, vrfCoordinator, subId);
+        addConsumer(mostRecentlyDeployed, vrfCoordinator, subId, account);
     }
 
-    function addConsumer(address contractToAddToVrf, address vrfCoordinator, uint256 subId) public {
+    function addConsumer(address contractToAddToVrf, address vrfCoordinator, uint256 subId, address account) public {
         console.log("Adding consumer contract: ", contractToAddToVrf);
         console.log("To vrfCoordinator: ", vrfCoordinator);
         console.log("On ChainId: ", block.chainid);
-        // everything between startBroadcast and stopBroadcast will be broadcasted to the blockchain.
-        vm.startBroadcast();
+        // everything between startBroadcast and stopBroadcast will be broadcasted to the blockchain and will broadcast it from the account passed(this account will make the transactions).
+        vm.startBroadcast(account);
         // calls `addConsumer` from the `VRFCoordinatorV2_5Mock` and it takes the parameters of the subId and consumer (so we pass the subId and contractToAddToVrf.)
         VRFCoordinatorV2_5Mock(vrfCoordinator).addConsumer(subId, contractToAddToVrf);
         vm.stopBroadcast();
