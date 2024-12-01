@@ -239,8 +239,16 @@ contract RaffleTest is Test, CodeConstants {
 
     /* FULFILL_RANDOM_WORDS */
 
+    modifier skipFork() {
+        // if the blockchain that we are deploying these tests on is not the local anvil chain, then return. When a function hits `return` it will not continue the rest of the logic
+        if (block.chainid != LOCAL_CHAIN_ID) {
+            return;
+        }
+        _;
+    }
+
     // unit test:
-    // function testFulfillRandomWordsCanOnlyBeCalledAfterPerformUpkeep() public raffleEntered {
+    // function testFulfillRandomWordsCanOnlyBeCalledAfterPerformUpkeep() public raffleEntered skipFork {
     //      // Arrange / Act / Assert
     // we expect the following call to revert with the error of `VRFCoordinatorV2_5Mock`;
     //     vm.expectRevert(VRFCoordinatorV2_5Mock.InvalidRequest.selector);
@@ -250,14 +258,18 @@ contract RaffleTest is Test, CodeConstants {
     // }
 
     // Fuzz test:
-    function testFulfillRandomWordsCanOnlyBeCalledAfterPerformUpkeep(uint256 randomRequestId) public raffleEntered {
+    function testFulfillRandomWordsCanOnlyBeCalledAfterPerformUpkeep(uint256 randomRequestId)
+        public
+        raffleEntered
+        skipFork
+    {
         // Arrange / Act / Assert
         // we expect the following call to revert with the error of `VRFCoordinatorV2_5Mock`;
         vm.expectRevert(VRFCoordinatorV2_5Mock.InvalidRequest.selector);
         VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(randomRequestId, address(raffle));
     }
 
-    function testFulfillrandomwordsPicksAWinnerResetsAndSendsMoney() public raffleEntered {
+    function testFulfillrandomwordsPicksAWinnerResetsAndSendsMoney() public raffleEntered skipFork {
         // Arrange
         uint256 additionalEntrances = 3; // so 4 people total since the raffleEntered modifier has PLAYER enter the raffle first.
         uint256 startingIndex = 1;
