@@ -939,6 +939,39 @@ If we need to test a part of our code that is outside of our system(example: pri
 
  you only want to deploy mocks when you are working on a local chain like anvil.
 
+### Local Chain Tests Don't Work on Forked Chain Tests?
+
+If you have a test that passes on the local chain, but fails on a forked chain, this could be happening for several reasons.
+First off, you want to make sure that you are deploying the tests from some sort of burner metamask wallet when deploying on a forked chain. When you write a test on a local chain, it just spins us a fake and local chain and account to run the the tests on. To make sure you are correctly deploying from a burner metamask on a local chain, review the `vm.startBroadcast` section in the `Getting Started With Scripts` section of this notes file.
+
+Second off, some tests may fail on a forked chain instead of a local chain if the test is using mocks. So when running tests on a forked chain, we must skip over these tests that are meant for a local chain(tests with mocks). We can do this by creating a modifier that skips over the tests with this modifier.
+example:
+```js
+   modifier skipFork() {
+    // if the blockchain that we are deploying these tests on is not the local anvil chain, then return. When a function hits `return` it will not continue the rest of the logic 
+        if (block.chainid != LOCAL_CHAIN_ID) {
+            return;
+        }
+        _;
+    }
+
+     function testFulfillRandomWordsCanOnlyBeCalledAfterPerformUpkeep(uint256 randomRequestId)
+        public
+        raffleEntered
+        skipFork
+    {
+        // Arrange / Act / Assert
+        // we expect the following call to revert with the error of `VRFCoordinatorV2_5Mock`;
+        vm.expectRevert(VRFCoordinatorV2_5Mock.InvalidRequest.selector);
+        VRFCoordinatorV2_5Mock(vrfCoordinator).fulfillRandomWords(randomRequestId, address(raffle));
+    }
+```
+As you can see this test has the `skipFork` modifier that we made.
+
+
+
+
+
 ### Testing Events
 
 To test an event, you need to copy and paste the events from the codebase to the test file in order to test them.
@@ -1121,6 +1154,7 @@ function setup() public {
             hoax(address(i), SEND_VALUE); // hoax is vm.deal and vm.prank combined.
             fundMe.fund{value: SEND_VALUE}();
         }
+ }
  ```
 As you can see from the example, `hoax` dealt money to the accounts in the loop and made it so that the next transactions would be from the accounts in the loop.
 
@@ -1161,8 +1195,27 @@ function ...
 These don't have do be used together, but they should be used together to avoid issues and be technically correct.
 Example:
 ```js
+ function testCheckUpkeepReturnsFalseIfRaffleIsntOpen() public {
+        // Arrange
+        // next transaction will come from the PLAYER address that we made
+        vm.prank(PLAYER);
+        // PLAYER pays the entrance fee and enters the raffle
+        raffle.enterRaffle{value: entranceFee}();
+        // vm.warp allows us to warp time ahead so that foundry knows time has passed.
+        vm.warp(block.timestamp + interval + 1); // current timestamp + the interval of how long we can wait before starting another audit plus 1 second.
+        // vm.roll rolls the blockchain forward to the block that you assign. So here we are only moving it up 1 block to make sure that enough time has passed to start the lottery winner picking in raffle.sol
+        vm.roll(block.number + 1);
+        // now we can call performUpkeep and this will change the state of the raffle contract from open to calculating, which should mean no one else can join.
+        raffle.performUpkeep("");
 
+        Raffle.RaffleState raffleState = raffle.getRaffleState();
+        // Act
+        (bool upkeepNeeded,) = raffle.checkUpkeep("");
+        // Assert
+        assert(!upkeepNeeded);
+    }
 ```
+
  ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  ## Chisel Notes
 
@@ -1304,6 +1357,92 @@ contract DeployRaffle is Script {
     }
 }
 
+```
+
+`vm.startBroadcast` & `vm.stopBroadcast`: All logic inbetween these two cheatcodes will be broadcasted/executed directly onto the blockchain.
+example: (from `foundry-smart-contract-lottery/script/DeployRaffle.s.sol`)
+```js
+contract DeployRaffle is Script {
+    function run() public {
+        deployContract();
+    }
+
+    function deployContract() public returns (Raffle, HelperConfig) {
+        // deploy a new helpconfig contract that grabs the chainid and networkConfigs
+        HelperConfig helperConfig = new HelperConfig();
+        // grab the network configs of the chain we are deploying to and save them as `config`.
+        // its also the same as doing ` HelperConfig.NetworkConfig memory config = helperConfig.getConfigByChainId(block.chainid);`
+        HelperConfig.NetworkConfig memory config = helperConfig.getConfig();
+
+        // if the subscription id does not exist, create one
+        if (config.subscriptionId == 0) {
+            // deploys a new CreateSubscription contract from Interactions.s.sol and save it as a variable named createSubscription
+            CreateSubscription createSubscription = new CreateSubscription();
+            // calls the createSubscription contract's createSubscription function and passes the vrfCoordinator from the networkConfigs dependent on the chain we are on. This will create a subscription for our vrfCoordinator. Then we save the return values of the subscriptionId and vrfCoordinator and vrfCoordinator as the subscriptionId and values in our networkConfig.
+            (config.subscriptionId, config.vrfCoordinator) =
+                createSubscription.createSubscription(config.vrfCoordinator);
+
+            // creates and deploys a new FundSubscription contract from the Interactions.s.sol file.
+            FundSubscription fundSubscription = new FundSubscription();
+            // calls the `fundSubscription` function from the FundSubscription contract we just created and pass the parameters that it takes.
+            fundSubscription.fundSubscription(config.vrfCoordinator, config.subscriptionId, config.link);
+        }
+
+        // everything between startBroadcast and stopBroadcast is broadcasted to a real chain
+        vm.startBroadcast();
+        // create a new raffle contract with the parameters that are in the Raffle's constructor. This HAVE to be in the same order as the constructor!
+        Raffle raffle = new Raffle(
+            // we do `config.` before each one because our helperConfig contract grabs the correct config dependent on the chain we are deploying to
+            config.entranceFee,
+            config.interval,
+            config.vrfCoordinator,
+            config.gasLane,
+            config.subscriptionId,
+            config.callBackGasLimit
+        );
+        vm.stopBroadcast();
+
+        // creates and deploys a new AddConsumer contract from the Interactions.s.sol file.
+        AddConsumer addConsumer = new AddConsumer();
+        // calls the `addConsumer` function from the `AddConsumer` contract we just created/deplyed and pass the parameters that it takes.
+        addConsumer.addConsumer(address(raffle), config.vrfCoordinator, config.subscriptionId);
+
+        // returns the new raffle and helperconfig that we just defined and deployed so that these new values can be used when this function `deployContracts` is called
+        return (raffle, helperConfig);
+    }
+}
+```
+
+However, the `vm.startBroadcast` can also be passed in the account that will be sending these transactions
+example: from `foundry-smart-contract-lottery-f23`
+```js
+    // these are the items that the constructor in DeployRaffle.s.sol takes
+    struct NetworkConfig {
+        uint256 entranceFee;
+        uint256 interval;
+        address vrfCoordinator;
+        bytes32 gasLane;
+        uint32 callBackGasLimit;
+        uint256 subscriptionId;
+        address link;
+        address account;
+    }
+
+    ...
+
+     // everything between startBroadcast and stopBroadcast is broadcasted to a real chain and the account from the helperConfig is the one making the transactions
+        vm.startBroadcast(config.account);
+        // create a new raffle contract with the parameters that are in the Raffle's constructor. This HAVE to be in the same order as the constructor!
+        Raffle raffle = new Raffle(
+            // we do `config.` before each one because our helperConfig contract grabs the correct config dependent on the chain we are deploying to
+            config.entranceFee,
+            config.interval,
+            config.vrfCoordinator,
+            config.gasLane,
+            config.subscriptionId,
+            config.callBackGasLimit
+        );
+        vm.stopBroadcast();
 ```
 
 ### HelperConfig Script Notes
