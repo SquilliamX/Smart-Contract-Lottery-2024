@@ -825,8 +825,6 @@ function exampleLog() external {
 ```
 
 
-
-
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ## Package Installing Notes:
@@ -852,7 +850,6 @@ for example:
 ```javascript
  remappings = ["@chainlink/contracts/=lib/chainlink-brownie-contracts/contracts/"]  // in this example, we are telling foundry that everytime it sees @chainlink/contracts/ , it should point to lib/chainlink-brownie-contracts/ as this is where our packages that we just installed stays
  ```
-
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -2493,6 +2490,63 @@ Will update this later!
 
 
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+## ERC-20s
+
+ERC = Ethereum Request of Comments
+
+ERC-20s are the industry standard of Tokens. ERC-20s represent tokens, but they are also smart contracts.
+
+
+
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## EIP Notes 
+
+EIP = Ethereum Improvement Proposal
+
+EIPs are a way for the community to suggest improvements to industry standards.
+
+
+
+### EIP status terms
+1. Idea - An idea that is pre-draft. This is not tracked within the EIP Repository.
+
+2. Draft - The first formally tracked stage of an EIP in development. An EIP is merged by an EIP Editor into the EIP repository when properly formatted.
+
+3. Review - An EIP Author marks an EIP as ready for and requesting Peer Review.
+
+4. Last Call - This is the final review window for an EIP before moving to FINAL. An EIP editor will assign Last Call status and set a review end date (`last-call-deadline`), typically 14 days later. If this period results in necessary normative changes it will revert the EIP to Review.
+
+5. Final - This EIP represents the final standard. A Final EIP exists in a state of finality and should only be updated to correct errata and add non-normative clarifications.
+
+6. Stagnant - Any EIP in Draft or Review if inactive for a period of 6 months or greater is moved to Stagnant. An EIP may be resurrected from this state by Authors or EIP Editors through moving it back to Draft.
+
+7. Withdrawn - The EIP Author(s) have withdrawn the proposed EIP. This state has finality and can no longer be resurrected using this EIP number. If the idea is pursued at later date it is considered a new proposal.
+
+8. Living - A special status for EIPs that are designed to be continually updated and not reach a state of finality. This includes most notably EIP-1.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
 
 ## Keyboard Shortcuts:
 
