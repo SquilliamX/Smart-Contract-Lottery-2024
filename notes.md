@@ -2338,14 +2338,7 @@ If you want to include the `.env` variables, then at the top of the MakeFile, wr
 
 The way to create a short cut in a Makefile is to write the shortcut on the left, and the command that is being rerouted goes on the right in the following format:
 `build:; forge build`. OR the shortcut goes on the left, and the command being rerouted goes below and indented with TAB in the format of:
-```MakeFile
-build:
-    forge build 
-```
 
-Then to run a Makefile command, run `make <shortcut-name>`. Example: `make build` !!!
-For example:
-(the .PHONY is to tell the MakeFile that the commands are not folders)
 ```MakeFile
 -include .env
 
@@ -2401,9 +2394,12 @@ fundSubscription:
 	@forge script script/Interactions.s.sol:FundSubscription $(NETWORK_ARGS)
 
 
+
 ```
 
-
+Then to run a Makefile command, run `make <shortcut-name>`. Example: `make build` !!!
+For example:
+(the .PHONY is to tell the MakeFile that the commands are not folders)
 
 
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

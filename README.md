@@ -77,7 +77,7 @@ Extensive testing suite including:
 
 ### Quick Start
 ```
-forge install
+make install
 ```
 
 ### Run Tests

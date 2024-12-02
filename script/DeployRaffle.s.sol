@@ -19,17 +19,17 @@ contract DeployRaffle is Script {
         HelperConfig.NetworkConfig memory config = helperConfig.getConfig();
 
         // if the subscription id does not exist, create one
-        if (config.subscriptionId == 0) {
+        if (config.subId == 0) {
             // deploys a new CreateSubscription contract from Interactions.s.sol and save it as a variable named createSubscription
             CreateSubscription createSubscription = new CreateSubscription();
-            // calls the createSubscription contract's createSubscription function and passes the vrfCoordinator from the networkConfigs dependent on the chain we are on. This will create a subscription for our vrfCoordinator. Then we save the return values of the subscriptionId and vrfCoordinator and vrfCoordinator as the subscriptionId and values in our networkConfig.
-            (config.subscriptionId, config.vrfCoordinator) =
+            // calls the createSubscription contract's createSubscription function and passes the vrfCoordinator from the networkConfigs dependent on the chain we are on. This will create a subscription for our vrfCoordinator. Then we save the return values of the subId and vrfCoordinator and vrfCoordinator as the subId and values in our networkConfig.
+            (config.subId, config.vrfCoordinator) =
                 createSubscription.createSubscription(config.vrfCoordinator, config.account);
 
             // creates and deploys a new FundSubscription contract from the Interactions.s.sol file.
             FundSubscription fundSubscription = new FundSubscription();
             // calls the `fundSubscription` function from the FundSubscription contract we just created and pass the parameters that it takes.
-            fundSubscription.fundSubscription(config.vrfCoordinator, config.subscriptionId, config.link, config.account);
+            fundSubscription.fundSubscription(config.vrfCoordinator, config.subId, config.link, config.account);
         }
 
         // everything between startBroadcast and stopBroadcast is broadcasted to a real chain and the account from the helperConfig is the one making the transactions
@@ -41,7 +41,7 @@ contract DeployRaffle is Script {
             config.interval,
             config.vrfCoordinator,
             config.gasLane,
-            config.subscriptionId,
+            config.subId,
             config.callBackGasLimit
         );
         vm.stopBroadcast();
@@ -49,7 +49,7 @@ contract DeployRaffle is Script {
         // creates and deploys a new AddConsumer contract from the Interactions.s.sol file.
         AddConsumer addConsumer = new AddConsumer();
         // calls the `addConsumer` function from the `AddConsumer` contract we just created/deplyed and pass the parameters that it takes.
-        addConsumer.addConsumer(address(raffle), config.vrfCoordinator, config.subscriptionId, config.account);
+        addConsumer.addConsumer(address(raffle), config.vrfCoordinator, config.subId, config.account);
 
         // returns the new raffle and helperconfig that we just defined and deployed so that these new values can be used when this function `deployContracts` is called
         return (raffle, helperConfig);

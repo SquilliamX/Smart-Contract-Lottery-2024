@@ -42,7 +42,7 @@ contract RaffleTest is Test, CodeConstants {
         //grab the network configs of the chain we are deploying to and save them as `config`.
         HelperConfig.NetworkConfig memory config = helperConfig.getConfig();
         // initializing the variables from the constructor dependent on the chain that we are on.
-        subscriptionId = config.subscriptionId;
+        subscriptionId = config.subId;
         gasLane = config.gasLane;
         interval = config.interval;
         entranceFee = config.entranceFee;
@@ -283,6 +283,7 @@ contract RaffleTest is Test, CodeConstants {
             // newPlayer enters raffle
             raffle.enterRaffle{value: entranceFee}();
         }
+
         // get the timestamp of when the contract was deployed
         uint256 startingTimeStamp = raffle.getLastTimeStamp();
         uint256 winnerStartingBalance = expectedWinner.balance;
