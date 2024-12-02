@@ -1726,7 +1726,39 @@ To programtically verify a contract, you must do it while deploying. When deploy
 Example:
 `forge script script/DeployFundMe.s.sol:DeployFundMe --rpc-url $SEPOLIA_RPC_URL --account <accountName> --sender <address> --broadcast --verify --etherscan-api-key $ETHERSCAN_API_KEY -vvvv`
 
+#### If a Deployed Contract does not Verify Correctly
 
+
+If a deployed contract does not verify correctly during deployment, we can then do the following to verify a contract:
+
+1. Run `forge verify-contract <contract-address> <contract> --etherscan-api-key $ETHERSCAN_API_KEY --rpc-url $SEPOLIA_RPC_URL --show-standard-json-input > json.json`
+
+Arguments:
+  <ADDRESS>
+          The address of the contract to verify
+
+  [CONTRACT]
+          The contract identifier in the form `<path>:<contractname>`
+
+example: `forge verify-contract 0x123456789 src/Raffle.sol:Raffle --etherscan-api-key $ETHERSCAN_API_KEY --rpc-url $SEPOLIA_RPC_URL --show-standard-json-input > json.json` 
+
+Make sure you have a ETHERSCAN_API_KEY and SEPOLIA_RPC_URL in your .env file.
+
+This command will create a new json.json in your root directory.
+
+2. Go to the file and press `ctrl` + `shift` + `p` and search for and select `format`. This json.json file is what is known as the standard json and is what verifiers will use to actually verify a contract.
+
+3. Go back to etherscan, in your contract tab where your contract should be verified. Click `Verify and publish`. This will take you to a page to select/fill details about your contract, such as the address of the contract, the compiler type and version and Open Source License Type (probably MIT). For the Compiler type, choose `Solidity (Standard-Json-Input)` and the compiler version you are using in your contract(s). 
+
+4. Click COntinue and on the next page it will ask you to select the `Standard-Json-Input` file to upload, here is where you will upload the json.json file we just made earlier. 
+
+5. Click `I'm not a robot` and verify and publish!
+
+
+
+#### ALL --VERIFY OPTIONS NOTES
+
+To see all the options of verifying a contract with forge, run `forge verify-contract --help`
 
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -2247,6 +2279,7 @@ contract DeployRaffle is Script {
 
 ```
 
+13. Finally, after we deploy the contract onto a testnet or mainnet, we need to register the new Upkeep with chainlink. To do this, go to vrf.chain.link and connect your wallet that deployed the contract. You should see that you have a new consumer added. Then switch from VRF, to automation and register a new Upkeep.
 
 ### Chainlink Automation (Custom Logic) Notes 
 
@@ -2326,7 +2359,7 @@ Example:
 In this example, `checkUpkeep` checking to see if all the conditionals return true then if all the conditionals return true then the return boolean in the `checkUpkeep` function declaration returns true as well. Then once the `checkUpkeep` function returns that ` bool upkeepNeeded` is true, It will perform perform upkeep. The `performUpkeep` function makes sure that the `checkUpkeep` is true, then it calls for a random number to be generated from Chainlink VRF. (The Chainlink VRF to get a randomNumber task and has nothing to do with chainlink automation, this task is just the automated task that is being performed in this example. )
 
 
-
+3. Finally, after we deploy the contract onto a testnet or mainnet, we need to register the new Upkeep with chainlink. To do this, go to automation.chain.link and register a new Upkeep. Connect your wallet that deployed the contract, and register the new upkeep. Click "Custom Logic" since that is what we are most likely using, then click next and it will prompt you for your contracts address. Input the contract address of the contract that was just deployed tat uses the Chainlink Automation. Then click next and enter the Upkeep details, such as the contract name and starting balance (it will ask for optional items, but you do not need to fill these out.). Then just click `Register Upkeep` and confirm the transaction in your metamask.
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
