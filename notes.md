@@ -804,6 +804,26 @@ contract Raffle {
 }
 ```
 
+### Console.log Notes
+
+To use console.log, import the following into your contract:
+
+```js
+import {console} from "forge-std/console.log";
+```
+
+Then to use console.log, follow the format below:
+
+```js
+function exampleLog() external {
+    console.log("Hello!");
+
+    uint256 dog = 3;
+    // this will say "Dog is equal to 3"
+    console.log("Dog is equal to: ", dog); 
+}
+```
+
 
 
 
