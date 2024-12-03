@@ -10,8 +10,8 @@ import {LinkToken} from "../test/mocks/LinkToken.sol";
 abstract contract CodeConstants {
     /* VRF Mock Values */
     // values that are from chainlinks mock constructor
-    uint96 public MOCK_BASE_FEE = 0.25 ether; // when we work with chainlink VRF we need to pay a certain amount of link token. The base fee is the flat value we are always going to pay
-    uint96 public MOCK_GAS_PRICE_LINK = 1e19; // when the vrf responds, it needs gas, so this is the cost of the gas that we spend to cover for it. This calculation is how much link per eth are we going to use?
+    uint96 public MOCK_BASE_FEE = 0.001 ether; // when we work with chainlink VRF we need to pay a certain amount of link token. The base fee is the flat value we are always going to pay
+    uint96 public MOCK_GAS_PRICE_LINK = 1e9; // when the vrf responds, it needs gas, so this is the cost of the gas that we spend to cover for it. This calculation is how much link per eth are we going to use?
     int256 public MOCK_WEI_PER_UNIT_LINK = 4_15; // link to eth price in wei
     // ^ these are just fake values for anvil ^
 
@@ -100,7 +100,7 @@ contract HelperConfig is CodeConstants, Script {
 
         // these are the items that are relevant for our raffle constructor if we are on the Anvil Chain when we deploy.
         localNetworkConfig = NetworkConfig({
-            entranceFee: 0.1 ether, // 1e16 // 16 zeros
+            entranceFee: 0.01 ether, // 1e16 // 16 zeros
             interval: 30, // 30 seconds
             vrfCoordinator: address(vrfCoordinatorMock), // the address of the vrfCoordinatorMock
             gasLane: 0x787d74caea10b2b357790d5b5247c2f63d1d91572a9846f780606e4d953677ae, // does not matter since this is on anvil

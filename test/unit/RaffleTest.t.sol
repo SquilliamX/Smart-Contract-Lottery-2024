@@ -19,7 +19,7 @@ contract RaffleTest is Test, CodeConstants {
     address public PLAYER = makeAddr("player");
     // the ammount we are going to give `PLAYER`
     uint256 public constant STARTING_PLAYER_BALANCE = 10 ether;
-    uint256 public constant LINK_BALANCE = 100 ether;
+    uint256 public constant LINK_BALANCE = 1000000000000000 ether;
 
     uint256 entranceFee;
     uint256 interval;
