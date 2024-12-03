@@ -1882,13 +1882,76 @@ Chainlink functions allow you to make any API call in a decentralized context th
 ### Aggregator PriceFeeds Notes
 Smart Contracts by themselves cannot access data outside of their own contracts. They cannot tell what the price of tokens are, what day it is, or who the president is. This is where chainlink datafeeds come in. Chainlink datafeeds take in data from many decentralized sources and their decentralized chainlink nodes decide what data is true based off their many decentralized sources. You can learn more about chainlink datafeeds in the chaink docs at `docs.chain.link` or at `https://updraft.cyfrin.io/courses/solidity/fund-me/real-world-price-data`.
 
-Pricefeeds are a type of datafeed from chainlink. You can see examples at data.chain.link. To use pricefeeds, 
+Pricefeeds are a type of datafeed from chainlink. You can see examples at data.chain.link. To use pricefeeds, you will need the address of the pricefeed and the interface of the AggregatorV3Interface.
+
+To get the address of the PriceFeed, go to `https://docs.chain.link/data-feeds/price-feeds/addresses?network=ethereum&page=1`, click on the chain you are looking to get data from, then scroll down to the contract pair that you want to get the price of and copy that address.
+
+To use the interface of the AggregatorV3Interface, run `forge install smartcontractkit/chainlink-brownie-contracts@1.1.1 --no-commit` in your terminal. Then in your `foundry.toml` create/add a remapping of ` remappings = ["@chainlink/contracts/=lib/chainlink-brownie-contracts/contracts/"] `
+
+If you need the interface of the AggregatorV3Interface from github for any reason, you can go to `https://github.com/smartcontractkit/chainlink/blob/develop/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol` - (this link may change, if so, the AggregatorV3Interface will still be in the smartcontractkit/chainlink github, but under a different file. If you cannot find it, then you can find the correct link in `https://github.com/Cyfrin/foundry-full-course-cu?tab=readme-ov-file#solidity-101-section-1-simple-storage` in Solidity 101 Section 3: Remix Fund Me, under `Interfaces`. The link should say something like `For reference - ChainLink Interface's Repo` and the link will be here.)
 
 
+Once you import the AggregatorV3Interface, you can pass the pricefeed address into the AggregatorV3Interface and it will return any data that you want from the AggregatorV3Interface interface. 
+
+AggregatorV3Interface at the time of this writing:
+```js
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+// solhint-disable-next-line interface-starts-with-i
+interface AggregatorV3Interface {
+  function decimals() external view returns (uint8);
+
+  function description() external view returns (string memory);
+
+  function version() external view returns (uint256);
+
+  function getRoundData(
+    uint80 _roundId
+  ) external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);
+
+  function latestRoundData()
+    external
+    view
+    returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);
+}
+
+```
+
+So for example, if you want to get the version of the pricefeed, you would call the function within the AggregatorV3Interface in one of your own functions in your contract. Example:
+```js
+import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+
+contract FundMe {
+// to attach the Price Converter functions to all uint256s:
+    using PriceConverter for uint256;
+
+// this variable is of type AggregatorV3Interface, and is used in the constructor. So that when deployed, the contract will read what chain we are on and use the correct pricefeed.
+    AggregatorV3Interface private s_priceFeed;
+
+     // the constructor is a function that gets immediately called when the contract is deployed.
+    // the priceFeed parameter means that it takes a pricefeed address, and this will depend on the chain we are deploying to. This way the codebase is much more modular.
+    constructor(address priceFeed) {
+        // this pricefeed address is set in the deployment script input!
+        // makes the deployer of this contract the "owner" of this contract.
+        i_owner = msg.sender;
+        s_priceFeed = AggregatorV3Interface(priceFeed);
+    }
+
+  function getVersion() public view returns (uint256) {
+        // this works because the address defined is correlated the functions "AggregatorV3Interface" and "version". We also imported the "AggregatorV3Interface" from chainlink.
+        // return AggregatorV3Interface(0x694AA1769357215DE4FAC081bf1f309aDC325306).version();
+        // ^ we refactored this code because it was hardcoded to sepolia, to make it more modular, we change it to (below): ^
+        return s_priceFeed.version();
+        // ^this is more modular because now it will get the address of the pricefeed dependant on the chain we deployed to. ^
+    }
+}
+```
+
+If for any reason you get stuck, watch the video Cyfrin Updraft, Course: Foundry Fundamentals, Section 2: Foundry Fund Me.
 
 
-
-example (from foundry-fund-me-f23):
+example (The following 4 snippets are from foundry-fund-me-f23):
 create a library that uses the AggregatorV3Interface from chainlink: 
 ```js
 // SPDX-License-Identifier: MIT
@@ -1930,30 +1993,21 @@ library PriceConverter {
 
 Use the library in the main contract to get price of assets:
 ```js
-// when starting a new project, write down what you want the code to do
-
-// get funds from users
-// withdraw funds
-// set a minimum funding value is USD
-
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.18;
 
 import {PriceConverter} from "./PriceConverter.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
-// when naming your errors, always name them with the contract name so you know what contract it came from
+
 error FundMe__NotOwner(); // custom errors save a ton of gas
-// ^ two underscores is the convention ^
 
 contract FundMe {
     // to attach the Price Converter functions to all uint256s:
     using PriceConverter for uint256;
 
     // uint256 public minimumUsd = 5 * (10 ** 18); // you can do this
-    uint256 public constant MINIMUM_USD = 5e18; // this is the same as above. We do this because solidity needs to know to keep it in terms of eth.
-    // this is marked with "constant" to save gas. Now when this contract is deployed, this variable will be stored into the bytecode instead of a storage slot. ** Only use constant on variables that will never change and these cannot be changed later on. **
-    // constant variables should be capitalized and use underscores
+    uint256 public constant MINIMUM_USD = 5e18; // this is the same as above. 
 
     // an array of addresses called funders.
     address[] private s_funders;
@@ -2210,6 +2264,45 @@ contract HelperConfig is Script {
         NetworkConfig memory anvilConfig = NetworkConfig({priceFeed: address(mockPriceFeed)});
         // returns this variable anvilConfig when this function is called. This returns the pricefeed address saved in the variable gets passed to the deployment script to let it know what the address it to pull data from the address.
         return anvilConfig;
+    }
+}
+
+```
+
+Have a deployment script that sets the correct pricefeed address dependent on the chain we are on(works with HelperConfig.s.sol):
+```js
+// SPDX-License-Identifier: MIT
+
+pragma solidity 0.8.18;
+
+// we must import Script.sol to tell foundry that this is a script.
+import {Script} from "forge-std/Script.sol"; // we need to import the script package from foundry when working on scripts in foundry/solidity.
+import {FundMe} from "../src/FundMe.sol";
+import {HelperConfig} from "./HelperConfig.s.sol";
+
+// this script will deploy our smart contracts. we should always deploy smart contracts this way.
+// Script contracts always need to inherit from scripts
+contract DeployFundMe is Script {
+    // all deployments scripts need to have this "run" function because this will be the main function called when deploying the contract.
+    function run() external returns (FundMe) {
+        // this says that when we start this `run` function, it will create a new helperconfig of type HelperConfig contract.
+        HelperConfig helperConfig = new HelperConfig();
+        // because we send this before `vm.startBroadcast`, it is executing this code in a simulated environment. So it is grabbing the chainId that we are deploying to right before we deploy the contracts
+
+        // we get the activeNetwork's pricefeed address and save it as a variable called "ethUsdPriceFeed"
+        address ethUsdPriceFeed = helperConfig.activeNetworkConfig();
+        // `activeNetworkConfig` is a variable of type struct, so if we had more variables in the struct, depending on what we would want we should save it as (address ethUsdPriceFeed, address exampleAddress, , ,)
+
+        // "vm.startBroadcast" is a cheatcode from foundry. it tells foundry "everything after this line should be sent to the rpc"
+        vm.startBroadcast();
+        // this line says variable name "fundMe" of type contract FundMe is equal to a new FundMe contract that is now being created and the broadcast line deploys it.
+        // FundMe fundMe = new FundMe(); // this line throws a warning since we do not use the variable fundMe
+        // new FundMe(0x694AA1769357215DE4FAC081bf1f309aDC325306); // this also creates a new FundMe contract
+
+        // we use this because now it will be more modular. All we do is now change this address and it will update our entire codebase.
+        FundMe fundMe = new FundMe(ethUsdPriceFeed); // this address gets inputted into the FundMe constructor.
+        vm.stopBroadcast();
+        return fundMe; // because this returns the deployed fundMe contract, we can make changes and it will always return the change we made. making the testing easier and more modular.
     }
 }
 
