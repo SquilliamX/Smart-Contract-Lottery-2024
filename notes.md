@@ -6,8 +6,9 @@ Search for the Department Names with `ctrl + F`:
 
 Getting Started Notes
     - Layout of Solidity Files/Contracts
+    - When Beginning To Write A New Contract Help Notes 
     - CEI (Checks, Effects, Interactions) Notes
-    - Modifier Notes:
+    - Modifier Notes
     - Visibility Modifier Notes 
     - Variable Notes
         - Constant Notes
@@ -24,7 +25,8 @@ Getting Started Notes
     - Enum Notes
     - Call and staticcall differences Notes
     - Inheritance Notes
-    - Inheriting Constructor Notes
+        - `Super` (Inheritance) keyword Notes
+        - Inheriting Constructor Notes
     - Override Notes
     - Modulo Notes
     - Sending Money in Solidity Notes
@@ -81,6 +83,12 @@ ChainLink Notes
     - Chainlink VRF 2.5 Notes
     - Chainlink Automation (Custom Logic) Notes
 
+OpenZeppelin Notes
+    - OpenZeppelin ERC20 Notes
+    - OpenZeppelin NFT Notes
+    - OpenZeppelin Mocks Notes
+    - OpenZeppelin Ownable Notes
+
 Makefile Notes
 
 Everything ZK-SYNC Notes
@@ -99,6 +107,11 @@ NFT Notes
 
 EIP Notes
     - EIP status terms
+
+DeFi Notes
+    - StableCoin Notes
+    - Why We Care About Stablecoins Notes
+    - Different Categories/Properties of StableCoins
 
 Keyboard Shortcuts
 
@@ -154,6 +167,34 @@ Layout of Functions:
  9. external & public view & pure functions
 
 
+
+
+### When Beginning To Write A New Contract Help Notes
+
+When beginning to write a new contract, think about what you want the contract to do, break it down into function, and write the interface of these function out so it becomes easier to see.
+
+example from foundry-defi-stablecoin-f23:
+```js
+contract DSCEngine {
+    function depositCollateralAndMintDsc() external {}
+
+    function depositCollateral() external {}
+
+    function redeemCollateralForDsc() external {}
+
+    function redeemCollateral() external {}
+
+    function mintDsc() external {}
+
+    function burnDsc() external {}
+
+    function liquidate() external {}
+
+    function getHealthFactor() external view {}
+}
+```
+
+
 ### CEI (Checks, Effects, Interactions) Notes
  When writing smart contacts, you always want to follow the CEI (Checks, Effects, Interactions) pattern in order to prevent reentrancy vulnerabilities and other vulnerabilities.
  This would look like
@@ -172,12 +213,39 @@ function exampleCEI() public {
  ```
 
 
-### Modifier Notes:
+### Modifier Notes
 
 Sometimes you will type alot of the same code over and over. To keep things simple and non-redundant, you can use a modifier.
 
 Modifiers are written with a `_;` before/after the code logic. The `_;` means to execute the code before or after the modifier code logic. The modifier will always execute first in the code function so `_;` represents whether to execute the function logic before or after the modifier.
-example:
+examples:
+
+
+```js
+contract DSCEngine {
+    /* Errors */
+    error DSCEngine__NeedsMoreThanZero();
+
+    /* Modifiers */
+    modifier moreThanZero(uint256 amount) {
+        if (amount == 0) {
+            revert DSCEngine__NeedsMoreThanZero();
+        }
+        _;
+    }
+
+    /*
+    * @dev `@param` means the definitions of the parameters that the function takes.
+    * @param tokenCollateralAddress: the address of the token that users are depositing as collateral
+    * @param amountCollateral: the amount of tokens they are depositing
+    */
+    function depositCollateral(address tokenCollateralAddress, uint256 amountCollateral) external moreThanZero(amountCollateral) {}
+}
+```
+As you can see from the example above, we created a modifier with a custom error. The modifier takes a parameter of a `uint256` named `amount`. When using this modifier, we pass the `uint256 amountCollateral` parameter used in the `function depositCollateral` as the parameter that the modifier uses. This needs to be done when your modifier has a parameter or you will get an error.
+
+
+
 ```js
  modifier raffleEntered() {
         vm.prank(PLAYER);
@@ -257,8 +325,9 @@ Example:
 ```javascript
 contract Example {
     uint private secretNumber; // Only this contract can access
-    
-    function privateFunction() private {
+
+    // internal & private functions start with a `_` to let us developers know that they are internal functions
+    function _privateFunction() private {
         // Only callable from within this contract
     }
 }
@@ -273,14 +342,15 @@ Example:
 contract Base {
     uint internal sharedNumber; // Accessible by inheriting contracts
     
-    function internalFunction() internal {
+    // internal & private functions start with a `_` to let us developers know that they are internal functions
+    function _internalFunction() internal {
         // Callable from this contract and inherited contracts
     }
 }
 
 contract Example is Base {
     function useInternal() public {
-        internalFunction(); // Can access internal members
+        _internalFunction(); // Can access internal members
         sharedNumber = 5;   // Can access internal variables
     }
 }
@@ -765,6 +835,37 @@ import {VRFConsumerBaseV2Plus} from "@chainlink/contracts/src/v0.8/vrf/dev/VRFCo
 contract Raffle is VRFConsumerBaseV2Plus {}
 ```
 After inheriting contracts, you can use variables from the parent contract in the child contract.
+
+
+#### `Super` (Inheritance) keyword Notes
+
+The keyword super should be used when we override a function from a parent contract, want to add logic, but still also call the regular function with all its logic from the parent contract.
+example from foundry-defi-stablecoin-f23:
+```js
+
+contract DecentralizedStableCoin is ERC20Burnable, Ownable {
+    // ... skipped code
+
+  function burn(uint256 _amount) public override onlyOwner {
+        // balance variable is the msg.sender's current balance
+        uint256 balance = balanceOf(msg.sender);
+        // if the amount they input is less than or equal to 0 revert.
+        if (_amount <= 0) {
+            revert DecentralizedStableCoin__MustBeMoreThanZero();
+        }
+        // if the msg.sender's balance is less than the amount they try to burn, revert.
+        if (balance < _amount) {
+            revert DecentralizedStableCoin__BurnAmountExceedsBalance();
+        }
+        // calls the burn function from the parent class
+        // `super` means to call the parent contract(ERC20Burnable) and call the function `burn` from the parent contract
+        // super is used because we overrided the contract, and we also want to complete the if statements above and do the regular burn function in the parent contract
+        super.burn(_amount);
+    }
+
+    // ... skipped code
+}
+```
 
 
 
@@ -1375,7 +1476,7 @@ contract RaffleTest is Test {
 
 ### Tests with Custom error notes
 
-When writing a test with a custom error, you need to expect the revert with `vm.expectRevert()` and you need to end it with `.selector` after the custom error.
+When writing a test with a custom error, you need to expect the revert with `vm.expectRevert()` and you need to end it with `.selector` after the custom error. 
 
 Example:
 ```js
@@ -1428,6 +1529,30 @@ contract Raffle is VRFConsumerBaseV2Plus {
     }
 ```
 
+Also, if you have a specific instance of the contract, you need not to use it for the error type and instead use the contract type/definition.
+```js
+contract DSCEngineTest is Test {
+    // even though we deploy a new instance of the DSCEngine, we cannot use this instance when calling the custom error type.
+    DSCEngine dsce;
+    function setUp() public {
+        // initialize the variables in setup function
+        deployer = new DeployDSC();
+        // get the values returns from the deployment script's `run` function and save the values to our variables dsc and dsce
+        (dsc, dsce, config) = deployer.run();
+}
+
+    function testRevertsWithUnapprovedCollateral() public {
+        ERC20Mock fakeTokenToTestWith = new ERC20Mock("fakeTokenToTestWith", "FTTTW", USER, AMOUNT_COLLATERAL);
+
+        vm.startPrank(USER);
+        // this works because we call the DSCEngine directly when calling the custom error type.
+        vm.expectRevert(DSCEngine.DSCEngine__NotAllowedToken.selector);
+        // for pretty much everything else we call on the DSCEngine contract, we call it through the new instance of the contract `dsce`
+        dsce.depositCollateral(address(fakeTokenToTestWith), AMOUNT_COLLATERAL);
+        vm.stopPrank();
+    }
+}
+```
 
 
 ### How to compare strings in Tests
@@ -1626,6 +1751,76 @@ Example:
         assert(!upkeepNeeded);
     }
 ```
+
+
+
+
+
+### Foundry Assertion Functions Notes
+
+
+At the end of a test written in foundry, we need to assert the values that we are testing. An assert is a statement that verifies if a condition is true. If the condition is false, the assert will fail and provide an error message. It's a way to validate that your code is working as expected.
+
+Some Assertion Functions are:
+
+```js
+// Compare equality
+assertEq(x, y);          // x == y
+assertEq(x, y, "message"); // x == y with custom error message
+```
+
+AssertEq is my favorite because it is the most used and it will log both the values when you run the test
+
+```js
+assert(x == y) // x == y
+```
+Assert is like AssertEq but it will not log the values, you must console.log them
+
+```js
+// Compare inequality
+assertNotEq(x, y);       // x != y
+```
+
+```js
+// Boolean assertions
+assertTrue(x);           // x is true
+assertFalse(x);          // x is false
+```
+
+```js
+// Compare approximate equality (for floating point)
+assertApproxEqAbs(x, y, delta);  // |x - y| <= delta
+assertApproxEqRel(x, y, percentage); // |x - y| <= |x| * percentage
+```
+
+```js
+// Compare greater/less than
+assertGt(x, y);          // x > y
+assertLt(x, y);          // x < y
+assertGe(x, y);          // x >= y
+assertLe(x, y);          // x <= y
+```
+
+Examples:
+
+assertEq (from foundry-defi-stablecoin-f23):
+```js
+ function testGetUsdPriceValue() public {
+        // 15 eth tokens(each eth token has 18 decimals)
+        uint256 ethAmount = 15e18;
+        // our helperconfig puts the eth price on anvil at 2,000/eth
+        // 15e18 * 2000eth = 30,000e18
+        uint256 expectedUsd = 30000e18;
+        // calls getUsdValue, but getUsdValue needs two paramters, the token and the amount
+        // so we pass the weth token we defined earlier from our helperconfig and we define the ethAmount earlier in this function
+        uint256 actualUsd = dsce.getUsdValue(weth, ethAmount);
+        // Assert the the expectedUsd and the actualUsd are the same
+        assertEq(expectedUsd, actualUsd);
+    }
+```
+
+
+
 
  ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  ## Chisel Notes
@@ -2208,7 +2403,7 @@ when deploying or interacting with contracts, if you get an error of `-ffi` then
 the `dry-run` folder is where the transactions with no blockchain specified go.
 
 `run-latest.json` is the latest transaction sent. the transaction data will look like: 
-# I am adding comments to explain what is going on here:
+
 ```javascript
   "transactions": [
     {
@@ -2234,7 +2429,7 @@ the `dry-run` folder is where the transactions with no blockchain specified go.
 ```
   When you send a transaction, you are signing it and sending it.
 
-  # cast is a very helpful tool. run `cast --help` to see all the helpful things it can do. 
+  cast is a very helpful tool. run `cast --help` to see all the helpful things it can do. 
 
   Watch the video about this @ https://updraft.cyfrin.io/courses/foundry/foundry-simple-storage/what-is-a-transaction . if that does not work, then it is the foundry fundamentals course, section 1, lesson 18: "What is a transaction"
 
@@ -2431,7 +2626,7 @@ It is important to check the contracts, functions, and parameters being sent whe
 
 ## TIPS AND TRICKS
 
-run `forge fmt` to auto format your code.
+run `forge fmt` to auto format your code. If you run `forge fmt` and it is not formatting the way you want, then go to you solidity extension (should be Nomic Foundation's Solidity), click settings, extension settings, and toggle the solidity formatter setting between prettier & forge to set the one you like more. Then when you save your code or run `forge fmt` it should format correctly.
 
 run `forge coverage` to see how many lines of code have been tested.
 
@@ -2507,6 +2702,8 @@ To get the address of the PriceFeed, go to `https://docs.chain.link/data-feeds/p
 To use the interface of the AggregatorV3Interface, run `forge install smartcontractkit/chainlink-brownie-contracts@1.1.1 --no-commit` in your terminal. Then in your `foundry.toml` create/add a remapping of ` remappings = ["@chainlink/contracts/=lib/chainlink-brownie-contracts/contracts/"] `
 
 If you need the interface of the AggregatorV3Interface from github for any reason, you can go to `https://github.com/smartcontractkit/chainlink/blob/develop/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol` - (this link may change, if so, the AggregatorV3Interface will still be in the smartcontractkit/chainlink github, but under a different file. If you cannot find it, then you can find the correct link in `https://github.com/Cyfrin/foundry-full-course-cu?tab=readme-ov-file#solidity-101-section-1-simple-storage` in Solidity 101 Section 3: Remix Fund Me, under `Interfaces`. The link should say something like `For reference - ChainLink Interface's Repo` and the link will be here.)
+
+To find out how many decimals a token pricefeed has, you can go to the pricefeed addresses of the chainlink docs and click `show more details` and it will have a tab named `Dec`, which stands for decimals.
 
 
 Once you import the AggregatorV3Interface, you can pass the pricefeed address into the AggregatorV3Interface and it will return any data that you want from the AggregatorV3Interface interface. 
@@ -3428,6 +3625,273 @@ In this example, `checkUpkeep` checking to see if all the conditionals return tr
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
+
+## OpenZeppelin Notes
+
+OpenZeppelin has many contracts, parent contracts, mocks and more that can help us in development. 
+
+To use OpenZeppelin, install their package with `forge install OpenZepplin/openzepplin-contracts --no-commit`. 
+
+then create a remapping in your `foundry.toml` of `remappings = ['@openzeppelin=lib/openzeppelin-contracts']` .
+
+
+
+
+### OpenZeppelin ERC20 Notes
+
+OpenZeppelin has ERC contracts that are ready to deploy and have been audited. You can find more about these in their docs. `https://docs.openzeppelin.com/contracts/5.x/tokens`.
+
+OpenZeppelin also has a `wizard` that allows you to build a pre-selection of different tokens depending on what you want them to do: `https://docs.openzeppelin.com/contracts/5.x/wizard`
+
+
+To use OpenZepplin Contracts in your codebase do the following:
+ 1. run `forge install OpenZepplin/openzepplin-contracts --no-commit`. 
+ 
+ 2. then create remapping in your `foundry.toml` of `remappings = ['@openzeppelin=lib/openzeppelin-contracts']` .
+
+ 3. Then import the ERC you want to use and inherit the imported file.
+
+ 4. Implement the constructor used in the inherited file.
+
+ example from foundry-erc20-f23:
+ ```js
+// SPDX-License-Identifier: MIT
+
+pragma solidity 0.8.19;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
+contract OurToken is ERC20 {
+    // since the ERC20 contract we inherited from has a constructor, we must implement the constructor.
+    constructor(uint256 initalSupply) ERC20("OurToken", "OT") {
+        // mint the msg.sender of this contract the entire initial Supply
+        _mint(msg.sender, initalSupply);
+    }
+}
+```
+
+
+### OpenZeppelin NFT Notes
+
+To learn more about NFT building and how to work with OpenZeppelin's NFT contracts, view the ` Creating NFTs ` section.
+
+### OpenZeppelin Mocks Notes
+
+OpenZeppelin has many mocks that can help developers with testing.
+
+Some examples are:
+    - ERC20 Mock
+    - ERC1271 Wallet Mock
+    - ERC2771 Context Mock
+    - ERC3156 Flash Borrower Mock
+    - ERC4626 Mock
+
+and many more.
+
+An example of using a mock is below:
+```js
+
+// SPDX-License-Identifier: MIT
+
+pragma solidity 0.8.19;
+
+import {Script} from "forge-std/Script.sol";
+import {MockV3Aggregator} from "test/Mocks/MockV3Aggregator.sol";
+// import the ERC20 Mock from openzeppelin
+import {ERC20Mock} from "@openzeppelin/contracts/mocks/ERC20Mock.sol";
+
+contract HelperConfig is Script {
+    struct NetworkConfig {
+        address wethUsdPriceFeed;
+        address wbtcUsdPriceFeed;
+        address weth;
+        address wbtc;
+        uint256 deployerKey;
+    }
+
+    uint8 public constant DECIMALS = 8;
+    int256 public constant ETH_USD_PRICE = 2000e8;
+    int256 public constant BTC_USD_PRICE = 1000e8;
+    uint256 public constant INITIAL_BALANCE = 1000e8;
+    uint256 public constant DEFAULT_ANVIL_KEY = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
+
+    NetworkConfig public activeNetworkConfig;
+
+    constructor() {
+        if (block.chainid == 11155111) {
+            activeNetworkConfig = getSepoliaEthConfig();
+        } else {
+            activeNetworkConfig = getOrCreateAnvilEthConfig();
+        }
+    }
+
+    function getSepoliaEthConfig() public view returns (NetworkConfig memory sepoliaNetworkConfig) {
+        sepoliaNetworkConfig = NetworkConfig({
+            wethUsdPriceFeed: 0x694AA1769357215DE4FAC081bf1f309aDC325306, // ETH / USD
+            wbtcUsdPriceFeed: 0x1b44F3514812d835EB1BDB0acB33d3fA3351Ee43,
+            weth: 0xdd13E55209Fd76AfE204dBda4007C227904f0a81,
+            wbtc: 0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063,
+            deployerKey: vm.envUint("PRIVATE_KEY")
+        });
+    }
+
+    function getOrCreateAnvilEthConfig() public returns (NetworkConfig memory) {
+        if (activeNetworkConfig.wethUsdPriceFeed != address(0)) {
+            return activeNetworkConfig;
+        }
+
+        vm.startBroadcast();
+        MockV3Aggregator ethUsdPriceFeed = new MockV3Aggregator(DECIMALS, ETH_USD_PRICE);
+        // create new ERC20Mock with the constructor params that it takes. So here we are mocking the WETH token
+        ERC20Mock wethMock = new ERC20Mock("WETH", "WETH", msg.sender, INITIAL_BALANCE);
+
+
+        MockV3Aggregator btcUsdPriceFeed = new MockV3Aggregator(DECIMALS, BTC_USD_PRICE);
+        // create new ERC20Mock with the constructor params that it takes. So here we are mocking the WBTC token
+        ERC20Mock wbtcMock = new ERC20Mock("WBTC", "WBTC", msg.sender, INITIAL_BALANCE);
+        vm.stopBroadcast();
+
+        return NetworkConfig({
+            wethUsdPriceFeed: address(ethUsdPriceFeed),
+            wbtcUsdPriceFeed: address(btcUsdPriceFeed),
+            weth: address(wethMock),
+            wbtc: address(wbtcMock),
+            deployerKey: DEFAULT_ANVIL_KEY
+        });
+    }
+}
+
+```
+
+
+### OpenZeppelin Ownable Notes
+
+The Ownable contract by OpenZeppelin is a fundamental access control mechanism that provides a way to restrict certain functions to only be callable by an "owner" address. Here's a breakdown:
+
+
+
+Core Functionality
+1. Ownership Model:
+```js
+address private _owner;
+event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+```
+- Maintains a single owner address
+- Emits an event whenever ownership changes
+
+2. Constructor:
+```js
+constructor() {
+    _transferOwnership(_msgSender());
+}
+```
+- Sets the deployer (msg.sender) as the initial owner of the contract
+
+3. Key Modifier:
+```js
+modifier onlyOwner() {
+    _checkOwner();
+    _;
+}
+```
+- Used to restrict function access to only the owner
+- Can be added to any function that should be owner-only
+
+
+Main Functions
+
+1. Owner Management:
+```js
+function owner() public view virtual returns (address)
+function _checkOwner() internal view virtual
+```
+- owner(): Returns current owner's address
+- _checkOwner(): Internal validation that caller is owner
+
+2. Ownership Transfer:
+```js
+function transferOwnership(address newOwner) public virtual onlyOwner
+function _transferOwnership(address newOwner) internal virtual
+```
+- Allows owner to transfer ownership to new address
+- Includes safety check against zero address
+
+3. Ownership Renouncement:
+```js
+function renounceOwnership() public virtual onlyOwner
+```
+- Allows owner to permanently give up ownership
+- Sets owner to address(0)
+- Makes owner-only functions permanently inaccessible
+
+Common Use Cases:
+Restricting administrative functions
+Managing upgradeable contracts
+Controlling privileged operations
+Setting protocol parameters
+Emergency functions (like pause/unpause)
+To use Ownable in your contract, you would inherit from it like:
+```js
+contract MyContract is Ownable {
+    function privilegedFunction() public onlyOwner {
+        // Only the owner can call this
+    }
+}
+```
+
+
+Below is an example of transfering ownership of a contract(DecentralizedStableCoin.sol) to my DSCEngine.sol contract so that only the DSCEngine is the only contract that can use the mint and burn functions in my DecentralizedStableCoin.sol. Example is from foundry-defi-stablecoin-f23
+
+We transfer the ownership in my Deployment script where i deploy both the DSCEngine.sol and the DecentralizedStableCoin.sol
+```js
+// SPDX-License-Identifier: MIT
+
+pragma solidity 0.8.19;
+
+import {Script} from "forge-std/Script.sol";
+import {DecentralizedStableCoin} from "src/DecentralizedStableCoin.sol";
+import {DSCEngine} from "src/DSCEngine.sol";
+import {HelperConfig} from "./HelperConfig.s.sol";
+
+contract DeployDSC is Script {
+    address[] public tokenAddresses;
+    address[] public priceFeedAddresses;
+
+    function run() external returns (DecentralizedStableCoin, DSCEngine) {
+        HelperConfig config = new HelperConfig();
+
+        (address wethUsdPriceFeed, address wbtcUsdPriceFeed, address weth, address wbtc, uint256 deployerKey) =
+            config.activeNetworkConfig();
+
+        tokenAddresses = [weth, wbtc];
+        priceFeedAddresses = [wethUsdPriceFeed, wbtcUsdPriceFeed];
+
+        vm.startBroadcast();
+        DecentralizedStableCoin dsc = new DecentralizedStableCoin();
+        DSCEngine engine = new DSCEngine(tokenAddresses, priceFeedAddresses, address(dsc));
+
+        // Transferring ownership of the DSC contract to the DSCEngine contract
+        // Making the DSCEngine the only contract that can mint and burn DSC tokens (because these functions are marked with onlyOwner modifier)
+
+        dsc.transferOwnership(address(engine));
+        vm.stopBroadcast();
+        return (dsc, engine);
+    }
+}
+
+```
+
+This is important because:
+- It ensures that only the DSCEngine can mint/burn DSC tokens
+- Users can't directly mint or burn tokens by interacting with the DSC contract
+- All minting/burning must go through the DSCEngine's logic, which enforces:
+- Proper collateralization ratios
+- Health factor checks
+- Other safety mechanisms
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
 ## Makefile Notes
 
 A makefile is a way to create your own shortcuts. terminal commands in solidity can be very long, so you can essentially route your own shortcuts for terminal commands. Also, the `Makefile` needs to be `Makefile` and not `MakeFile` (the `f` needs to be lowercase) or `make` commands will not work.
@@ -3606,6 +4070,83 @@ example:
     }
 ```
 
+If the TransferFrom function is used in a contract, then this means that the sequence must be:
+1. User approves DSCEngine to spend their tokens
+2. User calls depositCollateral
+3. DSCEngine uses transferFrom to move the tokens
+
+This must be how the test is written because this is how the function transferFrom works.
+Example from foundry-defi-stablecoin-f23:
+src/DSCEngine.sol:
+```js
+
+    /*
+    * @notice follows CEI
+    * @dev `@param` means the definitions of the parameters that the function takes.
+    * @param tokenCollateralAddress: the address of the token that users are depositing as collateral
+    * @param amountCollateral: the amount of tokens they are depositing
+    */
+    function depositCollateral(address tokenCollateralAddress, uint256 amountCollateral)
+        external
+        moreThanZero(amountCollateral)
+        isAllowedToken(tokenCollateralAddress)
+        nonReentrant
+    {
+        // we update state here, so when we update state, we must emit an event.
+        // updates the user's balance in our tracking/mapping system by adding their new deposit amount to their existing balance for the specific collateral token they deposited
+        s_collateralDeposited[msg.sender][tokenCollateralAddress] += amountCollateral;
+
+        // emit the event of the state update
+        emit CollateralDeposited(msg.sender, tokenCollateralAddress, amountCollateral);
+
+        // Attempt to transfer tokens from the user to this contract
+        // 1. IERC20(tokenCollateralAddress): Cast the token address to tell Solidity it's an ERC20 token
+        // 2. transferFrom parameters:
+        //    - msg.sender: the user who is depositing collateral
+        //    - address(this): this DSCEngine contract receiving the collateral
+        //    - amountCollateral: how many tokens to transfer
+        // 3. This transferFrom function that we are calling returns a bool: true if transfer succeeded, false if it failed, so we capture the result
+        bool success = IERC20(tokenCollateralAddress).transferFrom(msg.sender, address(this), amountCollateral);
+        // This transferFrom will fail if there's no prior approval. The sequence must be:
+        // 1. User approves DSCEngine to spend their tokens
+        // User calls depositCollateral
+        // DSCEngine uses transferFrom to move the tokens
+
+        // if it is not successful, then revert.
+        if (!success) {
+            revert DSCEngine__TransferFailed();
+        }
+    }
+```
+
+Then the test from `transferFrom` is:
+test/integration/DSCEngineTest.t.sol:
+```js
+function testRevertsIfCollateralIs0() public {
+        // Start acting as the USER
+        vm.startPrank(USER);
+
+        // USER approves DSCEngine (dsce) to spend 0 WETH tokens
+        ERC20Mock(weth).approve(address(dsce), 0);
+
+        // Expect the next call to revert with this specific error
+        vm.expectRevert(DSCEngine.DSCEngine__NeedsMoreThanZero.selector);
+
+        // Try to deposit 0 collateral
+        dsce.depositCollateral(weth, 0);
+
+        // Stop acting as the USER
+        vm.stopPrank();
+    }
+```
+If we tried to skip the approval step, the transferFrom would fail because the DSCEngine contract would have no permission to move the user's tokens.
+
+`transferFrom` is when you transfer from another person. (So this would be good in a deposit function as we are transfering tokens from a user into this contract. The other suer has to give us approval)
+
+
+
+
+
 The `transfer` function will make the `msg.sender`(the caller of the transfer function) to be the `_from` address, and the only parameters it will take are a `_to` address and an `_amount`:
 example:
 ```js
@@ -3613,6 +4154,7 @@ example:
     ourToken.transfer(alice, transferAmount);
 
 ```
+`transfer` is when you transfer from yourself(so this would be good in withdraw functions for example, as we would be sending from this contract to another user).
 
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -3926,7 +4468,8 @@ In this example, we are using the cheatcode `vm.readFile` that foundry has to re
 fs_permissions = [{ access = "read", path = "./img/" /* img should be replaced with the folder that you want to readFiles from. In this example i want to use readFile on my `img` folder */ }]
 ```
 
-Then in this example, after we read/save the SVG files, we write the function `svgToImageURI` that adds the baseURL (so our browser can decode the base64 encoded text) to the encoded text after it encodes it. then it passes these BaseURL+encoded-strings to the constructor of the main NFT contract.
+Then in this example, after we read/save the SVG files, we write the function `svgToImageURI` that adds the baseURL (so our browser can decode the base64 encoded text) to the encoded text after it encodes it. then it passes these BaseURL+encoded-strings to the constructor of the main NFT contract. 
+
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ## EIP Notes 
@@ -3955,9 +4498,112 @@ EIPs are a way for the community to suggest improvements to industry standards.
 8. Living - A special status for EIPs that are designed to be continually updated and not reach a state of finality. This includes most notably EIP-1.
 
 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+## DeFi Notes
+
+### StableCoin Notes
+
+A stablecoin is a non-volatile crypto asset. 
+
+A stablecoin is a crypto asset whose buying power fluctuates very little relative to the rest of the market/stablecoins stay relatively stable. A stablecoin is a crypto asset whose buying power stays relatively the same.
+
+#### Why We Care About Stablecoins Notes
+
+In every type of society, we need some type of low volatility/stable currency to fulfull the 3 functions of money:
+1. `Storage of Value`: a way to keep the value/wealth we've generated. Putting dollars in your bank account, or buying stocks/cryptos are a good example of storing your value. Apples would make for a poor storage of value since they would rot over time and lose their value.
+
+2. `Unit of Account`: is a way to measure of valuable something is. When you go shopping, you see prices being listed in terms of dollars. This is an exmaple of the dollar being used as an unit of account. Pricing something in bitcoin would be a poor unit of account since the prices would change all the time.
+
+3. `Medium of Exchange`: is an agreed upon method to transact with eachother. Buying groceries with dollars is a good example of using dollars as a medium of exchange. Buying groceries with car tires would make for a poor medium of exchange, since car tires are hard to transact with.
+
+In order for our everyday lives to be efficient, we need our money to do these three things (above).
+
+In a decentralized world, we need a decentralized money. Assets like Ethereum work great as a storage of value and medium of exchange, but fall behind a little bit due to their unit of account bue to their buying power volatility. (Perhaps in the future ethereum will become stable and we won't even need stablecoins lol).
+
+#### Different Categories/Properties of StableCoins
+
+
+1. `Relative Stability` - `Pegged/Anchored` or `Floating`
+    - When we talk about stability, something is stable only to something else.
+    - The most popular type of Stablecoins are pegged/anchored stablecoins. These are stablecoins that are pegged or anchored to another asset like the US dollar.
+        - Thether, DAI, and USDC are all examples of US dollar pegged StableCoins. These coins follow the natative of 1 coin = 1 dollar. It's stable because they track the price of another asset that we think is stable. Most of these stablecoins have sometype of mechanism to make these stablecoins almost interchangeable with their pegged asset.
+            - For example, USDC says that for every USDC token printed/minted there is a dollar or a bunch of assets that equal a dollar in a bank account somewhere. The way this works is that at any time you should be able to swap your USDC for the dollar.
+            - DAI uses a permissionless over-collateralization to maintain its peg.
+    - A stablecoin does not have to be pegged to another asset, it can be "floating". To be considered a stablecoin, its' buying power needs to stay relatively the same over time. So a floating stablecoin is "floating" because its buying power stays the same and it is not tied down to any other asset.
+        - With this mechanism, you could hypothetically have a stablecoin that is even more stable than a pegged/anchored stablecoin.
+            - For example, the US dollar experiences inflation every year, whereas a floating stablecoin could experience no inflation, ever.
+
+
+2. `Stability Method` - `Governed` or `Algorithmic`
+    - Stability Method is the way that keeps the coin stable. If it is a pegged stablecoin, what is the pegging mechanism? If it is a floating stablecoin, what is the floating mechanism? Typically, the mechanism revolves around minting or buring the stablecoin in very specific ways, and typically refers to who or what is doing the minting and burning. These are on a spectrum of Governed to Algorithmic.
+        - In a governed stablecoin, there is a governed body or a centralized body that is minting or burning the stablecoin. A maximally governed and least algorithmic stablecoin, there is a single person/entity/organization/government/DAO minting or burning new stablecoins.
+            - These Governed coins are typically considered centralized, since there is a singular body that is controlling the minting and burning. You could make them a little more decentralized by introducing a DAO
+            - USDC, Thether, and TUSD are examples of governed stablecoins.
+        
+        - Algorithmic Stablecoins whose stablity is by a permissionless algorithim with no human intervention. An Algorithmic Stablecoin is just when a set of autonomous code or algorthim dictates the minting and burning. There are 0 humans involved.
+            - A coin like DAI is much more algorthmic than governed because it uses a permission algorthim to mint and burn tokens.
+            - Examples of Algorthimic stablecoins are DAI, Frax, Rai and the disaster UST.
+
+        - A token can have alorithimic and governed properties. There is a spectrum of Most governed to most algorithmic.
+            - DAI does have a autonomous set of code that dictates the minting and burning of tokens, but it does also have a DAO where they can vote on and different things like different interest rates, what can be collateral types, and more.
+                - Technically, DAI is a hybrid system because it has a governance mechanism and some algorithimic mechanisms.
+            - USDC would fall purely in the governed category because it is controlled by a centralized body.
+            UST and LUNA would fall almost purely in algorithimic.
+
+   
+
+3. `Collateral Type` - `Endogenous` or `Exogenous`
+
+    Collateral here means the assets backing our stable coins and giving it value.
+        - For example, USDC has the dollar as its collateral and its the dollar that gives the USDC token its value. You can hypothetically swap 1 usdc for 1 dollar
+        - Dai is collateralized by many assets. For example, you can deposit eth and get minted DAI in return.
+
+
+    `Exogenous` collateral is collateral that originates from outside the protocol.
+
+    `Endogenous` collateral originates from inside the protocol.
+
+    One of the easier ways to define what type of collateral a token is using is to ask this question:
+        If the stablecoin fails, does the underlying collateral also fail?
+            - If yes, then its endogenous.
+            - If no, then its Exogenous.
+
+
+        Let's test this:
+        If USDC fails, does the underlying collateral(US dollar) fail? 
+            - No! The US dollar would not fail if USDC fails. Therefore, USDC is exogenous.
+
+        If DAI fails, does the underlying collateral(eth & other cryptos) fail?
+            - No! The other cryptos would not fail if DAI fails. Therefore, DAI is exogenous.
+
+        If UST fails, does the underlying collateral(LUNA) fail?
+            - Yes! LUNA would fail! Therefore, UST is/was endogenous.
+
+    Other questions to ask to define what type of collateral a token is using are to ask these questions:
+        - Was the collateral created with the sole purpose of being collateral?
+            - If yes, then its endogenous.
+            - If no, then its exogenous.
+        and/or
+        - Does the protocol own the issuance of the underlying collateral?
+            - If yes, then its endogenous.
+            - If no, then its Exogenous.
+
+
+    Endogenous Collateral stablecoins are typically backed by nothing since they own their own underlying collateral. This is why UST/LUNA failed. 
 
 
 
+
+
+ Here is an example of a chart comparing collateral type vs stability mechanism.
+ Governed vs Algorithmic on the y axis, and Exogenous(anchored) vs Endogenous(reflexive) on the x axis: 
+     ![alt text](image.png)
+
+     Most Fiat collateralized stablecoin almost all fall into the governed/dumb section (lol) since they are dealing with fiat currency and you need a centralized entity to onboard that fiat to the blockchain.
+
+
+You can learn more at ` https://updraft.cyfrin.io/courses/advanced-foundry/develop-defi-protocol/defi-stablecoins `
 
 
 
