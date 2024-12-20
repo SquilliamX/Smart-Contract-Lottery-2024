@@ -1,6 +1,7 @@
 # Notes 
 
 ## Glossary
+```
 
 Search for the Department Names with `ctrl + F`:
 
@@ -41,6 +42,11 @@ Getting Started Notes
         - What is a Merkle Proof?
         - Benefits
     - Signatures Notes
+        - EIP-191 Notes
+        - EIP-712 Notes (Recommended)
+        - OpenZeppelin Signature Notes
+        - ECDSA Signatures
+    
 
 Package Installing Notes
 
@@ -83,6 +89,7 @@ DEPLOYING PRODUCTION CONTRACT Notes
 How to interact with deployed contracts from the command line Notes
     - CAST SIG NOTES
     - cast --calldata-decode Notes
+    - cast wallet sign Notes
     - How to be safe when interacting with contracts
 
 TIPS AND TRICKS
@@ -129,8 +136,11 @@ DeFi Notes
     - Why We Care About Stablecoins Notes
     - Different Categories/Properties of StableCoins
 
-Keyboard Shortcuts
+## Upgradeable Smart Contracts Notes
 
+
+Keyboard Shortcuts
+```
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ## Getting Started Notes
@@ -1304,6 +1314,8 @@ If we had a dynamic array that can grow indefintely, looping through every item 
 Essentially, merkle proofs allow us to prove that some piece of data is in fact in a group of data. 
 Example:
     If we have a group of data, like a group of addresses with an allowed amount, is my address in that group of addresses? Merkle Proofs enable us to do this, and Merkel Proofs come from Merkel Trees, and Merkel tress are the data strcuture that is used here
+
+You can learn more about Merkle Trees at `https://updraft.cyfrin.io/courses/advanced-foundry/merkle-airdrop/merkle-proofs `. This section of the cyfrin course goes over Merkle Trees & proofs, signatures and ECDSA(v, r, s).
     
 #### What is a Merkle Tree?
 Merkle trees are a data structure in computer science. Merkle trees are used to encrypt blockchain data more securely and efficiently. It was invented by Ralph Merkle in 1979. Ralph Merkle also happens to be one of the inventors of public key cryptography!
@@ -1398,15 +1410,422 @@ A merkle Proof is a way for someone to prove that some data is on one of the Mer
 
 #### Using a Merkle Tree & Proofs Example
 
+The following example is from `merkle-airdrop`. https://github.com/SquilliamX/christmas-merkle-airdrop
+
+GenerateInput.s.sol:
+This script generates the input JSON file for the Merkle tree.
+    - Creates a list of addresses and amounts
+    - Writes them to input.json
 ```js
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import { Script } from "forge-std/Script.sol";
+import { stdJson } from "forge-std/StdJson.sol";
+import { console } from "forge-std/console.sol";
+
+// Merkle tree input file generator script
+contract GenerateInput is Script {
+    uint256 private constant AMOUNT = 25 * 1e18;
+    string[] types = new string[](2);
+    uint256 count;
+    string[] whitelist = new string[](4);
+    string private constant INPUT_PATH = "/script/target/input.json";
+
+    function run() public {
+        types[0] = "address";
+        types[1] = "uint";
+        whitelist[0] = "0x6CA6d1e2D5347Bfab1d91e883F1915560e09129D";
+        whitelist[1] = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
+        whitelist[2] = "0x2ea3970Ed82D5b30be821FAAD4a731D35964F7dd";
+        whitelist[3] = "0xf6dBa02C01AF48Cf926579F77C9f874Ca640D91D";
+        count = whitelist.length;
+        string memory input = _createJSON();
+        // write to the output file the stringified output json tree dumpus
+        vm.writeFile(string.concat(vm.projectRoot(), INPUT_PATH), input);
+
+        console.log("DONE: The output is found at %s", INPUT_PATH);
+    }
+
+    function _createJSON() internal view returns (string memory) {
+        string memory countString = vm.toString(count); // convert count to string
+        string memory amountString = vm.toString(AMOUNT); // convert amount to string
+        string memory json = string.concat('{ "types": ["address", "uint"], "count":', countString, ',"values": {');
+        for (uint256 i = 0; i < whitelist.length; i++) {
+            if (i == whitelist.length - 1) {
+                json = string.concat(
+                    json,
+                    '"',
+                    vm.toString(i),
+                    '"',
+                    ': { "0":',
+                    '"',
+                    whitelist[i],
+                    '"',
+                    ', "1":',
+                    '"',
+                    amountString,
+                    '"',
+                    " }"
+                );
+            } else {
+                json = string.concat(
+                    json,
+                    '"',
+                    vm.toString(i),
+                    '"',
+                    ': { "0":',
+                    '"',
+                    whitelist[i],
+                    '"',
+                    ', "1":',
+                    '"',
+                    amountString,
+                    '"',
+                    " },"
+                );
+            }
+        }
+        json = string.concat(json, "} }");
+
+        return json;
+    }
+}
 
 ```
+
+
+MakeMerkle.s.sol:
+This script takes the input JSON and generates the Merkle proofs:
+    - Reads input.json
+    - Creates leaf nodes by hashing address+amount pairs
+    - Generates Merkle proofs for each leaf
+    - Writes proofs to output.json
+```js
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import { Script } from "forge-std/Script.sol";
+import { stdJson } from "forge-std/StdJson.sol";
+import { console } from "forge-std/console.sol";
+import { Merkle } from "murky/src/Merkle.sol";
+import { ScriptHelper } from "murky/script/common/ScriptHelper.sol";
+
+// Merkle proof generator script
+// To use:
+// 1. Run `forge script script/GenerateInput.s.sol` to generate the input file
+// 2. Run `forge script script/Merkle.s.sol`
+// 3. The output file will be generated in /script/target/output.json
+
+/**
+ * @title MakeMerkle
+ * @author Squilliam
+ *
+ * Original Work by:
+ * @author kootsZhin
+ * @notice https://github.com/dmfxyz/murky
+ */
+contract MakeMerkle is Script, ScriptHelper {
+    using stdJson for string; // enables us to use the json cheatcodes for strings
+
+    Merkle private m = new Merkle(); // instance of the merkle contract from Murky to do shit
+
+    string private inputPath = "/script/target/input.json";
+    string private outputPath = "/script/target/output.json";
+
+    string private elements = vm.readFile(string.concat(vm.projectRoot(), inputPath)); // get the absolute path
+    string[] private types = elements.readStringArray(".types"); // gets the merkle tree leaf types from json using
+        // forge standard lib cheatcode
+    uint256 private count = elements.readUint(".count"); // get the number of leaf nodes
+
+    // make three arrays the same size as the number of leaf nodes
+    bytes32[] private leafs = new bytes32[](count);
+
+    string[] private inputs = new string[](count);
+    string[] private outputs = new string[](count);
+
+    string private output;
+
+    /// @dev Returns the JSON path of the input file
+    // output file output ".values.some-address.some-amount"
+    function getValuesByIndex(uint256 i, uint256 j) internal pure returns (string memory) {
+        return string.concat(".values.", vm.toString(i), ".", vm.toString(j));
+    }
+
+    /// @dev Generate the JSON entries for the output file
+    function generateJsonEntries(
+        string memory _inputs,
+        string memory _proof,
+        string memory _root,
+        string memory _leaf
+    )
+        internal
+        pure
+        returns (string memory)
+    {
+        string memory result = string.concat(
+            "{",
+            "\"inputs\":",
+            _inputs,
+            ",",
+            "\"proof\":",
+            _proof,
+            ",",
+            "\"root\":\"",
+            _root,
+            "\",",
+            "\"leaf\":\"",
+            _leaf,
+            "\"",
+            "}"
+        );
+
+        return result;
+    }
+
+    /// @dev Read the input file and generate the Merkle proof, then write the output file
+    function run() public {
+        console.log("Generating Merkle Proof for %s", inputPath);
+
+        for (uint256 i = 0; i < count; ++i) {
+            string[] memory input = new string[](types.length); // stringified data (address and string both as strings)
+            bytes32[] memory data = new bytes32[](types.length); // actual data as a bytes32
+
+            for (uint256 j = 0; j < types.length; ++j) {
+                if (compareStrings(types[j], "address")) {
+                    address value = elements.readAddress(getValuesByIndex(i, j));
+                    // you can't immediately cast straight to 32 bytes as an address is 20 bytes so first cast to
+                    // uint160 (20 bytes) cast up to uint256 which is 32 bytes and finally to bytes32
+                    data[j] = bytes32(uint256(uint160(value)));
+                    input[j] = vm.toString(value);
+                } else if (compareStrings(types[j], "uint")) {
+                    uint256 value = vm.parseUint(elements.readString(getValuesByIndex(i, j)));
+                    data[j] = bytes32(value);
+                    input[j] = vm.toString(value);
+                }
+            }
+            // Create the hash for the merkle tree leaf node
+            // abi encode the data array (each element is a bytes32 representation for the address and the amount)
+            // Helper from Murky (ltrim64) Returns the bytes with the first 64 bytes removed
+            // ltrim64 removes the offset and length from the encoded bytes. There is an offset because the array
+            // is declared in memory
+            // hash the encoded address and amount
+            // bytes.concat turns from bytes32 to bytes
+            // hash again because preimage attack
+            leafs[i] = keccak256(bytes.concat(keccak256(ltrim64(abi.encode(data)))));
+            // Converts a string array into a JSON array string.
+            // store the corresponding values/inputs for each leaf node
+            inputs[i] = stringArrayToString(input);
+        }
+
+        for (uint256 i = 0; i < count; ++i) {
+            // get proof gets the nodes needed for the proof & strigify (from helper lib)
+            string memory proof = bytes32ArrayToString(m.getProof(leafs, i));
+            // get the root hash and stringify
+            string memory root = vm.toString(m.getRoot(leafs));
+            // get the specific leaf working on
+            string memory leaf = vm.toString(leafs[i]);
+            // get the singified input (address, amount)
+            string memory input = inputs[i];
+
+            // generate the Json output file (tree dump)
+            outputs[i] = generateJsonEntries(input, proof, root, leaf);
+        }
+
+        // stringify the array of strings to a single string
+        output = stringArrayToArrayString(outputs);
+        // write to the output file the stringified output json tree dumpus
+        vm.writeFile(string.concat(vm.projectRoot(), outputPath), output);
+
+        console.log("DONE: The output is found at %s", outputPath);
+    }
+}
+
+```
+
+
+
+
+MerkleAirdrop.sol
+```js
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import { Script } from "forge-std/Script.sol";
+import { stdJson } from "forge-std/StdJson.sol";
+import { console } from "forge-std/console.sol";
+import { Merkle } from "murky/src/Merkle.sol";
+import { ScriptHelper } from "murky/script/common/ScriptHelper.sol";
+
+// Merkle proof generator script
+// To use:
+// 1. Run `forge script script/GenerateInput.s.sol` to generate the input file
+// 2. Run `forge script script/Merkle.s.sol`
+// 3. The output file will be generated in /script/target/output.json
+
+/**
+ * @title MakeMerkle
+ * @author Squilliam
+ *
+ * Original Work by:
+ * @author kootsZhin
+ * @notice https://github.com/dmfxyz/murky
+ */
+contract MakeMerkle is Script, ScriptHelper {
+    using stdJson for string; // enables us to use the json cheatcodes for strings
+
+    Merkle private m = new Merkle(); // instance of the merkle contract from Murky to do shit
+
+    string private inputPath = "/script/target/input.json";
+    string private outputPath = "/script/target/output.json";
+
+    string private elements = vm.readFile(string.concat(vm.projectRoot(), inputPath)); // get the absolute path
+    string[] private types = elements.readStringArray(".types"); // gets the merkle tree leaf types from json using
+        // forge standard lib cheatcode
+    uint256 private count = elements.readUint(".count"); // get the number of leaf nodes
+
+    // make three arrays the same size as the number of leaf nodes
+    bytes32[] private leafs = new bytes32[](count);
+
+    string[] private inputs = new string[](count);
+    string[] private outputs = new string[](count);
+
+    string private output;
+
+    /// @dev Returns the JSON path of the input file
+    // output file output ".values.some-address.some-amount"
+    function getValuesByIndex(uint256 i, uint256 j) internal pure returns (string memory) {
+        return string.concat(".values.", vm.toString(i), ".", vm.toString(j));
+    }
+
+    /// @dev Generate the JSON entries for the output file
+    function generateJsonEntries(
+        string memory _inputs,
+        string memory _proof,
+        string memory _root,
+        string memory _leaf
+    )
+        internal
+        pure
+        returns (string memory)
+    {
+        string memory result = string.concat(
+            "{",
+            "\"inputs\":",
+            _inputs,
+            ",",
+            "\"proof\":",
+            _proof,
+            ",",
+            "\"root\":\"",
+            _root,
+            "\",",
+            "\"leaf\":\"",
+            _leaf,
+            "\"",
+            "}"
+        );
+
+        return result;
+    }
+
+    /// @dev Read the input file and generate the Merkle proof, then write the output file
+    function run() public {
+        console.log("Generating Merkle Proof for %s", inputPath);
+
+        for (uint256 i = 0; i < count; ++i) {
+            string[] memory input = new string[](types.length); // stringified data (address and string both as strings)
+            bytes32[] memory data = new bytes32[](types.length); // actual data as a bytes32
+
+            for (uint256 j = 0; j < types.length; ++j) {
+                if (compareStrings(types[j], "address")) {
+                    address value = elements.readAddress(getValuesByIndex(i, j));
+                    // you can't immediately cast straight to 32 bytes as an address is 20 bytes so first cast to
+                    // uint160 (20 bytes) cast up to uint256 which is 32 bytes and finally to bytes32
+                    data[j] = bytes32(uint256(uint160(value)));
+                    input[j] = vm.toString(value);
+                } else if (compareStrings(types[j], "uint")) {
+                    uint256 value = vm.parseUint(elements.readString(getValuesByIndex(i, j)));
+                    data[j] = bytes32(value);
+                    input[j] = vm.toString(value);
+                }
+            }
+            // Create the hash for the merkle tree leaf node
+            // abi encode the data array (each element is a bytes32 representation for the address and the amount)
+            // Helper from Murky (ltrim64) Returns the bytes with the first 64 bytes removed
+            // ltrim64 removes the offset and length from the encoded bytes. There is an offset because the array
+            // is declared in memory
+            // hash the encoded address and amount
+            // bytes.concat turns from bytes32 to bytes
+            // hash again because preimage attack
+            leafs[i] = keccak256(bytes.concat(keccak256(ltrim64(abi.encode(data)))));
+            // Converts a string array into a JSON array string.
+            // store the corresponding values/inputs for each leaf node
+            inputs[i] = stringArrayToString(input);
+        }
+
+        for (uint256 i = 0; i < count; ++i) {
+            // get proof gets the nodes needed for the proof & strigify (from helper lib)
+            string memory proof = bytes32ArrayToString(m.getProof(leafs, i));
+            // get the root hash and stringify
+            string memory root = vm.toString(m.getRoot(leafs));
+            // get the specific leaf working on
+            string memory leaf = vm.toString(leafs[i]);
+            // get the singified input (address, amount)
+            string memory input = inputs[i];
+
+            // generate the Json output file (tree dump)
+            outputs[i] = generateJsonEntries(input, proof, root, leaf);
+        }
+
+        // stringify the array of strings to a single string
+        output = stringArrayToArrayString(outputs);
+        // write to the output file the stringified output json tree dumpus
+        vm.writeFile(string.concat(vm.projectRoot(), outputPath), output);
+
+        console.log("DONE: The output is found at %s", outputPath);
+    }
+}
+
+```
+
+
+To summarize:
+1. GenerateInput.s.sol creates the initial data.
+2. MakeMerkle.s.sol processes this data.
+3. MerkleAirdrop.sol uses this data.
+
+The flow works like this:
+1. GenerateInput.s.sol creates list of who gets what
+2. MakeMerkle.s.sol:
+    - Creates a Merkle tree from this list
+    - Generates one root hash
+    - Generates unique proofs for each address
+3. MerkleAirdrop.sol:
+    - Stores only the root hash on-chain
+    - When someone claims:
+        - They provide their proof (from output.json)
+        - Contract verifies their proof matches the root
+        - If valid, they get their tokens
+
+This is efficient because:
+    - Only one hash (the root) needs to be stored on-chain
+    - Each user can prove they're on the list without the contract needing to store the full list
+    - The proofs can be distributed off-chain (via output.json)
+    - The Merkle tree structure makes it cryptographically impossible to:
+    - Claim if you're not on the list
+    - Claim more than your allocated amount
+    - Claim on behalf of someone else (due to signatures)
+
+
 
 Note: What is the significance of hashing a leaf node twice before verification?
 
     Answer: Hashing twice helps mitigate second preimage attacks, which could allow someone to create a different input that generates the same hash, potentially leading to unauthorized token claims.
 
 ### Signatures Notes
+
+Note: You can learn more about Signatures at `https://updraft.cyfrin.io/courses/advanced-foundry/merkle-airdrop/signature-standards `. This section of the cyfrin course goes over Merkle Trees & proofs, signatures and ECDSA(v, r, s).
 
 In order to understand signature creation, signature verification and preventing replay attacks, EIP-191 and EIP-712 must be understood first:
 
@@ -1676,7 +2095,32 @@ contract SignatureVerifier {
 }
 ```
 
+#### ECDSA Signatures
 
+Note: You can learn more about Signatures at ` https://updraft.cyfrin.io/courses/advanced-foundry/merkle-airdrop/ecdsa-signatures `. This section of the cyfrin course goes over Merkle Trees & proofs, signatures and ECDSA(v, r, s).
+
+ECDSA = Elliptic Curve Digital Signature Algorithm
+
+ECDSA is based on Elliptic Curve Cryptography.
+
+ECDSA is used to:
+    - Generate key pairs
+    - Create Signatures
+    - Verify Signatures
+
+The specific curve used in ECDSA in ethereum is the Secp256k1 curve, and it was chosen for its interoperability with bitcoin, its effciency and its security
+
+##### What are signatures? 
+
+Blockchain signatures:
+    - Provide authentication in blockchain technology
+    - Verify that the message/transaction originates from the intended sender
+
+Proof of ownership in Ethereum is achieved using public and private key pairs and they are used to create digitial signatures.
+
+    Signatures are analogous(similar/comparable/parallel) to having to provide ID to withdraw from the bank. They are kind of like a digital finger print, adn they are unique to you, the user.
+
+    This public private key pair is used to verify that the sender is the owner of the account, this is known as public key cryptography and involves asymmetric encryption.
 
 
 
@@ -3529,7 +3973,7 @@ For example, if we want to call our store function in SimpleStorage.sol, we woul
 `cast send 0x5fbdb2315678afecb367f032d93f642f64180aa3 "store(uint256)" 123 --rpc-url $RPC_URL --account <accountName>`.
 
 Explantion:
-`cast send`: command to interact with the contract.
+`cast send`: command to interact with the contract / write to the contracts functions
 `0x5fbdb2315678afecb367f032d93f642f64180aa3`: address of the contract. if you forget what the address is, it can be found in the broadcast folder (check notes above).
 ` "store(uint256)" `: we want to interact with the store function, and it takes a uint256 as its parameter.
 `123`: the values(arguments) that we want to pass.
@@ -3548,6 +3992,33 @@ this command will return hex data, and needs to be decoded. so to decode it, run
 example: the hex data returned is: `0x000000000000000000000000000000000000000000000000000000000000007b` so the command is `cast --to-base 0x000000000000000000000000000000000000000000000000000000000000007b dec` ("dec" stands for decimal. it represents the type of format we want to decode the data to.)
 
 This returns the data that we submitted of `123`. (NOTE: This returns the data we submitted because it is the only data submitted and the contract function "retrieve" is written to return the most recent number.)
+
+Another Example of 
+`Cast call`: `cast call 0x5FbDB2315678afecb367f032d93F642f64180aa3 "balanceOf(address)" 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 ` - calls the balanceOf function on an ERC20 contract to see how many tokens of that ERC20 an address has. This returns hex data of `0x0000000000000000000000000000000000000000000000015af1d78b58c40000`, and to decode we can run either `cast --to-base 0x0000000000000000000000000000000000000000000000015af1d78b58c40000 dec` or `cast --to-dec 0x0000000000000000000000000000000000000000000000015af1d78b58c40000`
+
+`cast --to-dec`:
+    - Converts hexadecimal (base 16) to decimal (base 10)
+    - Commonly used for converting blockchain data to readable numbers
+    Example:
+```js
+cast --to-dec 0x0000000000000000000000000000000000000000000000015af1d78b58c40000
+25000000000000000000
+```
+
+`cast --to-base <hex-data> dec`:
+Converts from one base to another
+    - The "dec" parameter specifies conversion to decimal (base 10)
+    - More flexible than --to-dec as it can convert between different bases
+    Example:
+```js
+    # Convert hex to decimal (same as --to-dec)
+$ cast --to-base 0xff dec
+255
+
+# Can also convert to other bases like binary (2) or octal (8)
+$ cast --to-base 0xff bin  # to binary
+11111111
+```
 
 ### CAST SIG NOTES
 
@@ -3576,6 +4047,39 @@ example:
 
 This will return what values are being passed in this transaction for the parameters.
 
+
+### cast wallet sign Notes
+
+`cast wallet sign` is a Foundry command that creates digital signatures. Here's a general explanation:
+Think of cast wallet sign like a digital version of signing a physical document:
+`cast wallet sign <message> --private-key <your-private-key>` for anvil
+`cast wallet sign <message> --account <account-Name> --sender <account-public-address> ` for testnet/mainnet
+
+What it does:
+1. Takes a message (usually a hash) that you want to sign
+2. Uses your private key (like your unique signing ability)
+3. Produces a cryptographic signature that:
+    - Proves YOU signed this specific message
+    - Can be verified by anyone, but only created by you
+    - Cannot be forged without your private key
+    - Cannot be reused for other messages
+
+Common flags:
+`--no-hash` : Sign the exact message bytes (without hashing first).
+example: `cast wallet sign --no-hash <message> --account <account-Name> --sender <account-public-address>`
+
+Real-world analogy:
+    - Message = The document you're signing
+    - Private key = Your ability to sign
+    - Signature = Your actual signature
+    - Anyone can verify your signature (public), but only you can create it (private)
+
+This is commonly used in blockchain for:
+    - Proving ownership of an address
+    - Authorizing transactions
+    - Signing messages off-chain
+    - Creating meta-transactions
+The signature can later be verified on-chain using functions like `ECDSA.recover()` to prove that the owner of a specific address authorized something.
 
 
 
@@ -5208,6 +5712,11 @@ example:
 `transfer` is when you transfer from yourself(so this would be good in withdraw functions for example, as we would be sending from this contract to another user).
 
 
+Note: All functions in a public or external functions in a contract are callable. ERC20s have many functions we can call, for example, a famous one is `balanceOf`. We can run the following command in our terminal to get the balance of an address: `cast call <contract address> "balanceOf(address)" <address-of-user_or_contract>`.
+Example:
+`cast call 0x5FbDB2315678afecb367f032d93F642f64180aa3 "balanceOf(address)" 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 ` - calls the balanceOf function on an ERC20 contract to see how many tokens of that ERC20 an address has. This returns hex data of `0x0000000000000000000000000000000000000000000000015af1d78b58c40000`, and to decode we can run either `cast --to-base 0x0000000000000000000000000000000000000000000000015af1d78b58c40000 dec` or `cast --to-dec 0x0000000000000000000000000000000000000000000000015af1d78b58c40000`
+
+
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 ## NFT Notes (ERC-721 Notes)
@@ -5700,11 +6209,200 @@ In a decentralized world, we need a decentralized money. Assets like Ethereum wo
  Here is an example of a chart comparing collateral type vs stability mechanism.
  Governed vs Algorithmic on the y axis, and Exogenous(anchored) vs Endogenous(reflexive) on the x axis: 
      ![alt text](image.png)
+     This image can be found at ` https://github.com/SquilliamX/Foundry-Defi-Stablecoin-f23/raw/main/image.png `
 
      Most Fiat collateralized stablecoin almost all fall into the governed/dumb section (lol) since they are dealing with fiat currency and you need a centralized entity to onboard that fiat to the blockchain.
 
 
 You can learn more at ` https://updraft.cyfrin.io/courses/advanced-foundry/develop-defi-protocol/defi-stablecoins `
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+## Upgradeable Smart Contracts Notes
+
+Once Contracts are deployed onto the blockchain they are immutable and this is one of the major benefit of Smart Contracts. However this can be an issue if for example we want to upgrade our smart contracts or fix a bug in our smart contracts. This section will go into the different philosophies & patterns to upgrade smart contracts, each pattern as different advantages and disadvantages.
+
+Note: Majority of people in web3 view upgrading smart contracts as a terrible thing as it ruins the decentralization of the protocol.
+
+### Not Really Upgrading / Parameterize Upgrade Method
+
+This is the simplest way to think about upgrading your smart contracts. And it really isn't upgrading our smart contracts because we can't really change the logic of the smart contract when doing this method. Whatever logic is written, stays.
+
+    - Can't add new storage/state variables
+    - Can't add new logic
+
+An example of this method is:
+```js
+uint256 public reward;
+
+function setReward(uint256 _reward) public onlyOwner{
+    reward = _reward;
+}
+```
+This `setReward` function means we just have a bunch of setter functions and we can update certain parameters. For example, the Owner of this example contract could change the percentage of the rate of the reward at any time, or perhaps has a setter function that changes the variable every year/over time. It's just a setter function that changes some variable.
+
+
+Advantages: 
+    - Simple
+
+Disadvantages: 
+    - Not Flexible
+    - If you want to add logic to the smart contract, you cannot. Cannot Update Logic/code
+
+Note: Who has access to these setter functions? If it is one person, it is a CENTRALIZED smart contract. Of course you can add a DAO contract to be the admin contract of your protocol and that would be a decentralized way of doing this.
+
+
+### Social Migration Method
+
+If we want to upgrade a smart contract while also keeping decentralization, we can use the Social Migration Method. This is when you deploy a new contract that is not connected to your old smart contract in any way and by social convention, you tell everyone(all users) that this new contract that you have deployed is the most updated version and to begin using this new version instead of the old version.
+
+For example, AAVE uses this method. AAVE has AAVE-V1 and AAVE-V2 and users can use whichever one they want. 
+
+When doing this type of upgrade, we have to move the state of the first contract over to the second one. For example, if you are an ERC token moving to a new version of your token, you do need to have a way to take all those mappings from the first contract and move it to the second one. Obviously, there are ways to do this since everything is on-chain, but if you have a million transfer calls, you have to write a script that updates everyones balance and figures out what everyones balance is just to migrate to the new version of the contract. There is a ton of social convention work here to do. TrailOfBits has a fantastic blog on upgrading from a V1 to a V2(or other versions) with this yeet methodology and they give alot of steps for moving your storage and state variables over to the new contract: ` https://blog.trailofbits.com/2018/10/29/how-contract-migration-works/ `
+
+Advantages: 
+    - The most decentalized way to upgrade / Truest to blockchain value
+    - Easiest to Audit
+
+Disadvantages:
+    - Lot of work to convince users to move
+    - Different contract addresses.
+        For example, if you are an ERC20 token, you have to convince all the exchanges to list your new contracts address as the actual address.
+
+
+### Proxies Upgrade Method
+
+
+Proxies are the truest programatic form of upgrades since a user can keep interacting with the protocols through these proxies and not even notice that anything changes or even got updated. This is also the upgrade method where the most bugs happen.
+
+Proxies use alot of low level functionality, and the main one being `delegatecall` functionality.
+
+`Delegatecall`: is a low level function where the code in the target contract is executed in the context of the calling contract and `msg.sender` and `msg.value` do not change their values. This means if i delegatecall a function in contract 'B' from contract 'A', I will do contracts B's logic in contract A. So if contract B has a function that says:
+```js
+contract B {
+    uint256 public value;
+
+    function setValue(uint256 _value){
+        value = _value;
+    }
+}
+``` 
+Then the value variable will be set in contract a:
+```js
+Contract A {
+    // value is set in contract A
+    function doDelegateCall(){
+        callContractB(setValue());
+    }
+}
+```
+This is the powerhouse and this combined with the fallback function allows us to delegate all calls through a proxy contract address to some other contract. This means that I can have one proxy contract that will have the same address forever and I can just point and route people to the correct implementation contract that has the logic. Whenever I want to upgrade, I just deploy a new implementation contract and point my proxy to that new implementation. Now whenever a user calls a function on the proxy contract, I'm going to deletgate call it to the new contract. I can just call an admin only function on my proxy contract and I make all contract calls go to the new contract.
+
+
+Proxy Terminology:
+1. The Implementation Contract:
+    - Which has all our code of our protocol. When we upgrade, we launch a brand new implementation contract.
+
+2. The Proxy Contract:
+    - Which points to which implementation is the "correct" one, and routes everyone's function calls to that contract.
+
+3. The User:
+    - The user makes contract and function calls to the proxy
+
+4. The Admin:
+    - This is the user (or group of users/voters) who upgrade to new implemenatation contracts
+    - Admin is the one who decides when to upgrade and which contract to point to.
+
+
+All storage variables should be stored in the Proxy contract and not the implemantation contract. This way when I upgrade to a new logic contract, all of my data will stay on the proxy contract. So whenever I want to update my logic, just point to a new implementation contract. If i want to add a new storage variable or a new type of storage, I just add it my logic/implementation contract and the proxy contract will pick it up.
+
+
+Most likely bugs:
+    1. Storage Clashes
+    2. Function Selector Clashes
+
+Storage Clashes:
+When we use delegateCall, we do the logic of contract B inside of contract A. So if contract B says we need to set value to 2, it sets the value to 2 in contract A. But this actually sets the value of whatever is in the same storage location on Contract A as contract B.
+For example:
+```js
+contract B {
+    uint256 public differentValue;
+    uint256 public value;
+
+    function setDValue(uint256 _differentValue){
+        differentValue = _differentValue;
+    }
+}
+```
+Then in contract A, `value` is OVERWITTEN since we are setting the first storage spot on contract A to the new value:
+```js
+Contract A {
+    // value is set & OVERWRITTEN in contract A
+    function doDelegateCall(){
+        callContractB(setValue());
+    }
+}
+```
+
+This is crucial to know because this means we can only append new storage variables and new implementation contracts and we can't reorder or change old ones. This is called Storage Clashing.
+
+
+Function Selector Clashes:
+When we tell our proxies to delegate call to one of these implementations, it uses a function selector to find a function (Function Selector: A 4 bytes hash of a function name and function signature that define a function). It is possible that a function in the implementation contract has the same function selector as an admin function in the proxy contract, which may cause you to accidentally a whole bunch of weird stuff. For example:
+```js
+contract Foo {
+    function collate_propagate_storage(bytes16) external {}
+    function burn(uint256) external {}
+}
+```
+In the sample code above, even though these functions are totally different, they actually have the same function selector. So we can run into an issue where some harmless function like `getPrice()` has the same function selector as `upgradeProxy()` or `destoryProxy()` or something like that
+
+
+Advantages:
+    - Easy for users
+
+Disadvantages:
+    - most prone to bugs
+    - Centralized unless ran by a real DAO
+
+
+All the proxies mentioned below have some type of Ethereum improvemtn proposal (EIP) and most of them are in the draft phase
+
+
+#### Transparent Proxy Pattern
+
+In this pattern, admins are only allowed to call admin functions and admins can't functions in the implementation contract.
+
+Admin functions are functions that govern the upgrades.
+
+Users can only call functions in the implementation contract and not any admin contracts/functions. 
+
+This way, you can't ever accidentally have one of the two swapping and having a function selector clash and running into a big issue where you call a function you shouldn't have.
+
+Summary: 
+If you're an admin you call admin functions. Admin Functions are functions that govern the upgrades. Admin functions are located in the proxy contract. If admins want to use the protocol as a user, admins need to participate from a separate wallet address as a user.
+
+If you're a user, you're calling implementation functions.
+
+
+#### Universal Upgradeable Proxies (UUPS)
+
+This version of upgradeable contracts puts all logic of upgrading(AdminOnly Upgrade functions) in the implementation contracts instead of the proxy. This way the solidity compiler will throw an error and say "we have two functions here that have the same function selector".
+
+This is also advantageous because we have one less read that we have to do, saving gas. We no longer have to check in the proxy contract if someone is an admin or not, saving gas. And the proxy is also a little bit smaller because of this, saving gas.
+
+The issue is that if you deploy an implementation contract without any upgradeable functionality, you're stuck and its back to the social migration method for you.
+
+
+
+#### Diamond Pattern
+
+- Allows for multiple implementation contracts
+
+If you're contract is so big and it doesn't fit into the one contract maximum size, you can just have multiple contracts through this multi-implementation method.
+
+It also alows you to make more granular upgrades, like you don't have to always deploy and upgrade your entire smart contract, you can just upgrade little pieces of it if you've chunked them out.
 
 
 
@@ -5717,39 +6415,74 @@ You can learn more at ` https://updraft.cyfrin.io/courses/advanced-foundry/devel
 ## Keyboard Shortcuts
 
 `ctrl` + `a` = select everything
+
 `ctrl` + `b` = open left side bar
+
 `ctrl` + `c` = copy
+
 `ctrl` + `k`(in terminal) = clears terminal (VSCode)
+
 `ctrl` + `l` = open AI chat 
+
 `ctrl` + `n` = new tab
+
 `ctrl` + `p` = command pallet
+
 `ctrl` + `s` = save file
+
 `ctrl` + `v` = paste
+
 `ctrl` + `w` = closes currently active/focused tab
+
 `ctrl` + `y` = redo
+
 `ctrl` + `z` = undo
+
 `ctrl` + `/` = commenting out a line
+
 `ctrl` + ` = toggle terminal
+
 `ctrl` + `shift` + `t` = reopen the last closed tab
+
 `ctrl` + `shift` + `v` = paste without formating
+
 `ctrl` + <arrowKey> = move cursor to next word
+
 `ctrl` + `shift` + (←/→)<arrowKey> = select word by word
+
 `ctrl` + `shift` + (↑/↓)<arrowKey> = select line by line
+
 `alt` + (←/→)(<arrowKey>) = return to previous line in code
+
 `alt` + (↑/↓)<arrowKey> = move lines of code up or down
+
 `ctrl` + `alt` + (↑/↓)<arrowKey> = new cursor to edit many code lines simultaneously
+
 `crtl` + `alt` + (←/→)(<arrowKey>) = splitScreen view of code files
+
 `shift` + `alt` + (↑/↓)(<arrowKey>) = duplicate current line  
+
 `shift` + `alt` + (←/→)(<arrowKey>) = expanding or shrinking your text selection blocks
+
 `ctrl` + `shift` + `alt` + (←/→)(<arrowKey>) = selecting letter by letter
+
 `ctrl` + `shift` + `alt` + (↑/↓)(<arrowKey>) = new cursor to edit many code lines simultaneously
+
 `fn` + (←/→)(<arrowKey>) = beginning or end of text
+
 `ctrl` + `fn` + (←/→)(<arrowKey>) = beginning or end of page/file
+
 `ctrl` + `fn` + (↑/↓)(<arrowKey>) = switch through open tabs
+
 `fn` + `alt` + (↑/↓)(<arrowKey>) = scroll up or down
+
 `shift` + `fn` + (↑/↓)(<arrowKey>) = selects 1 page of items above or below
+
 `shift` + `fn` + (←/→)(<arrowKey>) = select everything on current line from cursor position.
+
 `ctrl` + `shift` + `fn` + (↑/↓)(<arrowKey>) = moves tab location
+
 `ctrl` + `shift` + `fn` + (←/→)(<arrowKey>) = selects all text to beginning or end from your cursor position.
+
 `ctrl` + `shift` + `alt` + `fn` + (↑/↓)(<arrowKey>) = new cursors created up to 1 page above or below
 
