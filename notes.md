@@ -36,6 +36,7 @@ Getting Started Notes
     - abi.encode Notes & abi.encodePacked Notes
     - How to use abi.encode and abi.decode Notes
     - Function Selector & Function Signature Notes
+    - Delegatecall Notes
     - Merkle Tree & Merkle Proof Notes
         - What is a Merkle Tree?
         - Structure / How Merkle Tree Works
@@ -63,6 +64,8 @@ Smart Contract Tests Notes
         - `fail_on_revert` Notes
         - How to read fuzz test outputs
     - CHEATCODES FOR TESTS Notes
+    - Foundry Assertion Functions Notes
+    - Debugging Tests Notes
 
 Chisel Notes
 
@@ -136,7 +139,28 @@ DeFi Notes
     - Why We Care About Stablecoins Notes
     - Different Categories/Properties of StableCoins
 
-## Upgradeable Smart Contracts Notes
+Account Abstraction Notes (EIP-4337)
+    - How Account Abstraction Works
+    - Account Abstraction in Ethereum Mainnet
+    - Account Abstraction in Zk-Sync
+
+Upgradeable Smart Contracts Notes
+    - Not Really Upgrading / Parameterize Upgrade Method
+    - Social Migration Method
+    - Proxies Upgrade Method
+    - Transparent Proxy Pattern
+    - Universal Upgradeable Proxies (UUPS)
+    - Diamond Pattern
+
+DAO Notes
+    - DAO Example: Compound Protocol
+    - Discussion Forum in DAOs
+    - Voting Mechanisms
+        - Implementation of Voting
+    - Tools
+        - No Code Solutions to build DAOs
+        - Dev Tools to build DAOs
+    - Legality
 
 
 Keyboard Shortcuts
@@ -1299,6 +1323,77 @@ if you want to interact with an outside contract from within a contract, its bes
 
 If you want more information, you can find it at ` https://updraft.cyfrin.io/courses/advanced-foundry/how-to-create-an-NFT-collection/evm-signatures-selectors ` - This video also goes over how to call any contracts/function even without having an interface
 
+
+
+
+
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+### Delegatecall Notes
+
+https://solidity-by-example.org/delegatecall/
+
+`delegatecall` is a low level function similar to `call`.
+
+When contract A executes `delegatecall` to contract B, B's code is executed with contract A's storage, `msg.sender` and `msg.value`.
+example:
+```js
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.26;
+
+// NOTE: Deploy this contract first
+contract B {
+    // NOTE: storage layout must be the same as contract A
+    uint256 public num;
+    address public sender;
+    uint256 public value;
+
+    function setVars(uint256 _num) public payable {
+        num = _num;
+        sender = msg.sender;
+        value = msg.value;
+    }
+}
+
+contract A {
+    uint256 public num;
+    address public sender;
+    uint256 public value;
+
+    event DelegateResponse(bool success, bytes data);
+
+    function setVars(address _contract, uint256 _num) public payable {
+        // A's storage is set, B is not modified.
+        (bool success, bytes memory data) = _contract.delegatecall(
+            abi.encodeWithSignature("setVars(uint256)", _num)
+        );
+
+        emit DelegateResponse(success, data);
+    }
+}
+
+```
+
+Note: in the example above, contract A has the same variable names are contract B, but this is not needed. Contract A could have it's variables named:  
+```js
+    uint256 public food;
+    address public drinks;
+    uint256 public dessert;
+```
+and the delegate call function would still work. `delegatecall` allows us to borrow functions and transposes the function logic to the storage location equivalence. `delegatecall` does not copy the storage values, `delegatecall` only copies the function logic, and whatever values are updated in the `delegatecall` function will be saved in the storage location equivalence. So in the example above, if `setVars` is called in contract A, it calls `delegatecall`, takes a contract address and a number paramter, this uint256 will be saved in the variable `food` since that is the storage location equivalence. The contract address is needed in the `delegatecall` so it knows which contract to point to, to copy its function logic in the function signature of "setVars(uint256)" within the contract that is passed.
+
+Also, in the example above, even if we did not have any variables in contract A, storage slot 00 and storage slot 01 would still get updated (the first two storage slots, it starts counting at 00).
+
+Also, in the example above, in contract A, if we change the variables to:
+```js
+    bool public food; // changed this to a bool
+    address public drinks;
+    uint256 public dessert;
+```
+the delegatecall function will still work, it's just setting the storage slot of the boolean to a number and when solidity reads it, it goes "well the storage location equivalence here is storage slot 00 and this storage slot is a boolean" And if this storage slot gets updated to anyting other than zero, it will be `true`; and if its a 0, it will return `false`.
 
 
 
@@ -3143,6 +3238,31 @@ assertEq (from foundry-defi-stablecoin-f23):
         assertEq(expectedUsd, actualUsd);
     }
 ```
+
+
+
+### Debugging Tests Notes
+
+You will come across many errors when testing. To debug them you have a few different choices:
+
+1. You can `console.log` values in the test to try and debug. Remember to run `-vv`/`-vvv`/`-vvvv` to see the logs
+
+2. You can run `-vv`/`-vvv`/`-vvvv` at the end of your `forge test --mt <functionName> -vvvv` to see the detailed output of the test output.
+
+
+3. You can run `--debug` to enter into a low level debugger in your terminal.
+    Example:
+    `forge test --debug <functionName> -vvv`, then press q to quit.
+
+    This is a low-level debugger and will have all the opCodes.
+
+    If you press `shift` + `g` this will bring you to the end where it actually reverted. It will show you in blue the line of the test that revert/has an issue.
+
+    At the bottom it shows you what keys to press and their functions.
+
+    If you start pressing `k`, it will walk us back through the codebase and eventually we will land on a line of code, this will be the line that is causing issues.
+
+
 
 
 
@@ -6219,6 +6339,66 @@ You can learn more at ` https://updraft.cyfrin.io/courses/advanced-foundry/devel
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
+## Account Abstraction Notes (EIP-4337)
+
+https://updraft.cyfrin.io/courses/advanced-foundry/account-abstraction/introduction
+
+Some people feel overwhelmed when getting into crypto, due to its private key rules, wallet mechanisms, gas costs, etc. The wallet use experience for getting into crypto isn't great.
+
+Account abstraction can be boiled down to one single thing: In a traditional transaction, you need to use your private key to sign the data to send a transaction; with account abstraction, you can sign the data with anything. Imagine being able to sign a transaction with your google account, or github account, or X account, or maybe you want to only be able to sign transactions during the day, or maybe 3 of your friends need to sign off first before you can make a transaction, or  you want a spending limit.
+
+So normally, with a private key(wallet) you can make transactions, but with account abstraction, whatever you want can be a wallet! And with this customization, this means that we can have other people pay for our transactions(gas costs) if we want to!
+
+Even parents can give their kids their first wallet, and code in some parental controls where the kids can create all the transactions and the parents approve them.
+
+Account Abstraction allows us to define anything can validate a transaction, not just a private key. All we have to do is code a smart contract that says "Here is what can sign my transactions". You can code literally any rules that you want into your account.
+
+
+### How Account Abstraction Works
+
+Here are two places where account abstraction exist, Ethereum, and zkSync, (but really most evm-compataible chain supports this, but not really L2s, which is why we use zkSync):
+
+
+#### Account Abstraction in Ethereum Mainnet
+https://eips.ethereum.org/EIPS/eip-4337
+
+As of March 1st, 2023, Ethereum Mainnet launched the first official Account Abstraction smart contract called the `entryPoint.sol`, and you have to interact with this smart contract in order to do account abstraction.
+
+In a traditional Ethereum transaction, you sign data with your wallet and spend gas, then send this transaction on-chain and the ethereum nodes will add this transaction to a block in the blockchain.
+
+To use account abstraction in ethereum, you must:
+    
+    1. Deploy a smart contract that defines "what" can sign transactions.
+        (Whereas previously only private keys could sign transactions).
+        For example, you could code that 3 friends have to sign the transaction with their private keys, or you could use something like a google session key to be the one to sign transactions. If you can code it, you can build it. So this new smart contract will be your new smart contract wallet.
+
+    2. To send a transaction, you send a "UserOperation" to an Alt-Mempool.
+        - "UserOperations" have additional transaction information
+        - Alt-Mempools are not the blockchain, Alt-Mempools are off-chain. Alt-Mempools are groups of nodes that are facilatating these "User Operations". Alt-Mempools are going to validate your user-operation, and they are going to pay gas to send your sign transaction on-chain. So it's the Alt-Mempool nodes that send transactions and doing the traditional ethereum transaction. Alt-Mempools nodes will send your smart contract to `EntryPoint.sol`. It's the EntryPoint.sol smart contract that handles every single account abstraction userOperations sent. All these Alt-Mempool nodes call the EntryPoint.sol's `handleOps` function, where they pass all the data associated with a user operation, which includes pointing to your smart contract that you deployed!
+
+        To summarize: You deploy your "UserOperations" smart contract to Alt-Mempool Nodes, Alt-Mempool nodes, validate your transaction, and they route your transaction on-chain to EntryPoint.sol where it points to your smart contract, which is where everything will be directed from. So whenever you interact the blockchain, your smart contract account that you deployed will be the msg.sender/"from" account. And it will go through all the logic in your smart contract, so if you make it so that you use google to sign keys, if googe does not sign your key, the whole transaction reverts.
+
+
+Signature Aggregator: Optional add-on to account abstraction where EntryPoint.sol will let you define a group of signatures that need to be aggregated. For example, this is where you can have your friends be on your multi-sig.
+
+
+PayMaster: This is where you setup your codebase to have somebody else pay for the transactions. You need to have a paymaster, because if you do not, the alt-mempool nodes will pay for your gas in transactions but they will only pay for the transaction if one of the account on chain is going to pay for it. So if you do not have a paymaster setup, it will pull funds out of your account.
+
+First run `forge install eth-infinitism/account-abstraction --no-commit`
+
+
+#### Account Abstraction in Zk-Sync
+Other chains like ZkSync have account abstraction natively baked in.
+
+You still have to deploy a smart contract that has all your rules codified, but the main difference is that the alt-mempool nodes are also the ZK-Sync nodes. So we get to skip the step of having to send our transactions to the alt-mempool because the Zk-Sync nodes also work as alt-mempool nodes.
+
+Zk-Sync can do this because they have "DefaultAccount.sol" is which default accounts for every single account. Every single metamask account, every single account in ZK-Sync is technically a smart contract account that has very specific functions and behaviors that can be validated. So anytime you interact with any address, it will always assume it's a smart contract because that's just how Zk-Sync works!
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
 ## Upgradeable Smart Contracts Notes
 
 Once Contracts are deployed onto the blockchain they are immutable and this is one of the major benefit of Smart Contracts. However this can be an issue if for example we want to upgrade our smart contracts or fix a bug in our smart contracts. This section will go into the different philosophies & patterns to upgrade smart contracts, each pattern as different advantages and disadvantages.
@@ -6276,7 +6456,7 @@ Disadvantages:
 
 Proxies are the truest programatic form of upgrades since a user can keep interacting with the protocols through these proxies and not even notice that anything changes or even got updated. This is also the upgrade method where the most bugs happen.
 
-Proxies use alot of low level functionality, and the main one being `delegatecall` functionality.
+Proxies use alot of low level functionality, and the main one being `delegatecall` functionality. (see the delegateCall Notes sections)
 
 `Delegatecall`: is a low level function where the code in the target contract is executed in the context of the calling contract and `msg.sender` and `msg.value` do not change their values. This means if i delegatecall a function in contract 'B' from contract 'A', I will do contracts B's logic in contract A. So if contract B has a function that says:
 ```js
@@ -6323,7 +6503,7 @@ Most likely bugs:
     2. Function Selector Clashes
 
 Storage Clashes:
-When we use delegateCall, we do the logic of contract B inside of contract A. So if contract B says we need to set value to 2, it sets the value to 2 in contract A. But this actually sets the value of whatever is in the same storage location on Contract A as contract B.
+When we use `delegateCall`, we do the logic of contract B inside of contract A. So if contract B says we need to set value to 2, it sets the value to 2 in contract A. But this actually sets the value of whatever is in the same storage location on Contract A as contract B.
 For example:
 ```js
 contract B {
@@ -6369,6 +6549,9 @@ Disadvantages:
 
 All the proxies mentioned below have some type of Ethereum improvemtn proposal (EIP) and most of them are in the draft phase
 
+Note: Upgradeable contracts do not use constructors in the implementation. This is because if the implementation has logic that sets variables, the proxy will not set those variables as the constructor for the implementation only sets those variables in the implementation.
+    To get around this, we need to deploy the implementation function, then we need to call a "intializer" function. This is basically our constructor, except it will be called in the proxy.
+
 
 #### Transparent Proxy Pattern
 
@@ -6394,6 +6577,245 @@ This is also advantageous because we have one less read that we have to do, savi
 
 The issue is that if you deploy an implementation contract without any upgradeable functionality, you're stuck and its back to the social migration method for you.
 
+In UUPS proxies, the upgrade is handles by the implementation and can eventually be removed!
+ 
+To use a UUPS, you can use openzeppelin's package:
+```js
+forge install OpenZeppelin/openzeppelin-contracts-upgradeable --no-commit
+```
+
+and import and inherit the UUPS, and write a `_authorizeUpgrade` override function:
+Example from `foundry-upgrades-f23/src/BoxV1.sol`:
+```js
+// SPDX-License-Identifier: MIT
+
+pragma solidity 0.8.18;
+
+import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+
+contract BoxV1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+    uint256 internal number;
+
+    /// @custom:oz-upgrades-unsafe-allow constructor // this comment turns off the warning/error of using a constructor
+    /// in the proxy.
+    constructor() {
+        _disableInitializers(); // constructors are not used in upgradeable contracts. this is best practice to prevent initializers from happening in the constructor
+    }
+
+    // intialize function is essentially a constuctor for proxies
+    // initializer modifier makes it so that this initialize function can only be called once
+    function initialize() public initializer {
+        // upgradeable intializer functions should start with double underscores `__`
+        __Ownable_init(); // sets owner to: owner = msg.sender
+        __UUPSUpgradeable_init(); // best practice to have to show this is a UUPS upgradeable contract
+    }
+
+    // example
+    function getNumber() external view returns (uint256) {
+        return number;
+    }
+
+    // example
+    function version() external pure returns (uint256) {
+        return 1;
+    }
+
+    // we need to override this function a use it
+    function _authorizeUpgrade(address newImplementation) internal override { }
+}
+
+```
+
+at the bottom of the `UUPSUpgradeable` file, there is a `uint256[50] private __gap;` that saves storage spaces for your contract, and you can change this `[50]` number to any number you want, and it is for adding new variables in the future, so that you can dont break your proxy when doing upgrades. This is so that in the future if you need to add storage slots, you don't collide with the existing storage reserves/slots.
+
+Note: If you see an error of `Linearization of inheritance graph impossible`, this means that we are trying to inherit contracts in the wrong order. So change the order of the inheritances.
+
+Below is an example of a implementation contract(BoxV2) that we are upgrading to:
+Example from `foundry-upgrades-f23/src/BoxV2.sol`:
+```js
+// SPDX-License-Identifier: MIT
+
+pragma solidity 0.8.19;
+
+import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+
+// second version of the implementation contract after the upgrade, this is the contract we are upgrading to
+contract BoxV2 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+    // example
+    uint256 internal number;
+
+    /// @custom:oz-upgrades-unsafe-allow constructor // this comment turns off the warning/error of using a constructor in the implementation.
+    constructor() {
+        _disableInitializers(); // constructors are not used in upgradeable contracts. this is best practice to prevent initializers from happening in the constructor
+    }
+
+    // intialize function is essentially a constuctor for proxies/implementations/upgrades
+    // initializer modifier makes it so that this initialize function can only be called once
+    function initialize() public initializer {
+        // upgradeable intializer functions should start with double underscores `__`
+        __Ownable_init(); // sets owner to: owner = msg.sender
+        __UUPSUpgradeable_init(); // best practice to have to show this is a UUPS upgradeable contract
+    }
+
+    function setNumber(uint256 _number) external {
+        number = _number;
+    }
+
+    function getNumber() external view returns (uint256) {
+        return number;
+    }
+
+    function version() external pure returns (uint256) {
+        return 2;
+    }
+
+    // we need to override this function a use it
+    function _authorizeUpgrade(address newImplementation) internal override { }
+}
+
+```
+
+below is a deployment script example of deploying our implementation before the upgrade:
+Example from `foundry-upgrades-f23/script/DeployBox.s.sol`:
+```js
+// SPDX-License-Identifier: MIT
+
+pragma solidity 0.8.19;
+
+// Import required contracts
+import { Script } from "forge-std/Script.sol";
+import { BoxV1 } from "src/BoxV1.sol";
+import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+
+contract DeployBox is Script {
+    // Main entry point for the deployment script
+    function run() external returns (address) {
+        // Call the deployment function and return the proxy address
+        address proxy = deployBox();
+        return proxy;
+    }
+
+    function deployBox() public returns (address) {
+        vm.startBroadcast();
+        // Step 1: Deploy the implementation contract (BoxV1)
+        // This contains the actual logic but should never be used directly
+        BoxV1 box = new BoxV1();
+
+        // Step 2: Deploy the ERC1967Proxy contract
+        // - First parameter (address(Box)): Points to the implementation contract
+        // - Second parameter (""): Empty bytes for initialization data
+        //   Note: We could pass initialize() function call here, but in this case we'll call it separately
+        ERC1967Proxy proxy = new ERC1967Proxy(address(box), "");
+        // The ERC1967Proxy is the actual proxy contract that users will interact with, and it delegates calls to your implementation contracts (BoxV1 first, and later can be upgraded to Boxv2).
+
+        vm.stopBroadcast();
+
+        // Return the address of the proxy contract
+        // This is the address users will interact with
+        return address(proxy);
+    }
+}
+
+```
+
+below is a upgrade script example of upgrade our implementation to boxV2:
+Example from `foundry-upgrades-f23/script/UpgradeBox.s.sol`:
+```js
+// SPDX-License-Identifier: MIT
+
+pragma solidity 0.8.19;
+
+// Import required contracts and tools
+import { Script } from "forge-std/Script.sol";
+import { BoxV1 } from "src/BoxV1.sol"; // Original implementation
+import { BoxV2 } from "src/BoxV2.sol"; // New implementation to upgrade to
+import { DevOpsTools } from "foundry-devops/src/DevOpsTools.sol"; // Helper for finding deployed contracts
+
+contract UpgradeBox is Script {
+    function run() external returns (address) {
+        // Get the address of the most recently deployed proxy contract
+        // DevOpsTools searches broadcast logs to find the ERC1967Proxy deployment
+        address mostRecentlyDeployed = DevOpsTools.get_most_recent_deployment("ERC1967Proxy", block.chainid);
+
+        vm.startBroadcast();
+        // Deploy the new implementation contract (BoxV2)
+        BoxV2 newBox = new BoxV2();
+        vm.stopBroadcast();
+
+        // Upgrade the proxy to point to the new implementation
+        // This keeps the same proxy address but changes the logic contract
+        address proxy = upgradeBox(mostRecentlyDeployed, address(newBox));
+        return proxy;
+    }
+
+    function upgradeBox(address proxyAddress, address newBox) public returns (address) {
+        vm.startBroadcast();
+        // Cast the proxy to BoxV1 to access the upgrade function
+        // We use BoxV1 type because it has the UUPS upgrade interface we need
+        BoxV1 proxy = BoxV1(proxyAddress);
+
+        // Call upgradeTo() which is inherited from UUPSUpgradeable
+        // This changes the implementation address in the proxy's storage
+        proxy.upgradeTo(address(newBox)); // proxy contract now points to this new address
+        vm.stopBroadcast();
+
+        // Return the proxy address (which hasn't changed)
+        return address(proxy);
+    }
+}
+```
+
+Below is a test contract, testing the implementation contract, the deployments, and upgrades:
+Example from `foundry-upgrades-f23/test/DeployAndUpgradeTest.t.sol`:
+```js
+// SPDX-License-Identifier: MIT
+
+pragma solidity ^0.8.19;
+
+import { DeployBox } from "../script/DeployBox.s.sol";
+import { UpgradeBox } from "../script/UpgradeBox.s.sol";
+import { Test, console } from "forge-std/Test.sol";
+import { ERC1967Proxy } from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import { BoxV1 } from "../src/BoxV1.sol";
+import { BoxV2 } from "../src/BoxV2.sol";
+
+contract DeployAndUpgradeTest is Test {
+    DeployBox public deployer;
+    UpgradeBox public upgrader;
+    address public OWNER = makeAddr("owner");
+
+    address public proxy;
+
+    function setUp() public {
+        deployer = new DeployBox();
+        upgrader = new UpgradeBox();
+        proxy = deployer.run(); // right now, points to boxV1
+    }
+
+    function testProxyStartsAsBoxV1() public {
+        vm.expectRevert();
+        BoxV2(proxy).setNumber(7);
+    }
+
+    function testUpgrades() public {
+        BoxV2 box2 = new BoxV2();
+
+        upgrader.upgradeBox(proxy, address(box2));
+
+        uint256 expectedValue = 2;
+        assertEq(expectedValue, BoxV2(proxy).version());
+
+        BoxV2(proxy).setNumber(7);
+        assertEq(7, BoxV2(proxy).getNumber());
+    }
+}
+
+```
+
 
 
 #### Diamond Pattern
@@ -6405,6 +6827,142 @@ If you're contract is so big and it doesn't fit into the one contract maximum si
 It also alows you to make more granular upgrades, like you don't have to always deploy and upgrade your entire smart contract, you can just upgrade little pieces of it if you've chunked them out.
 
 
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+## DAO Notes
+
+https://updraft.cyfrin.io/courses/advanced-foundry/daos/introduction-to-dao
+
+Decentralized Autonomous Organizations (DAOs): any group that is governed by a transparent set of rules found on a blockchain or smart contract
+
+Users are given voting power into what the DAO should do next and the rules of the voting is immutable, transparaent and decentralized.
+
+This solves an age old problem of trust, centrality and transparency in giving the power to the users of the protocol/application instead of everything happening behind closed doors. And this voting piece is a cornerstone of how these operate, this "decentralized governance".
+
+Technically, in a way, a DAO can be summarized by "Company/Organization operated exclusively through code".
+
+
+### DAO Example: Compound Protocol
+
+Compound is a borrowing and lending application/protocol that allows users to borrow and lend their assets. Everything is built in smart contracts.
+
+In compound, we can go to the governance tab, and click on any proposal and actually see everything about the proposal; who voted for, who voted against, and the proposal history. Somebody has to create the proposal in a proposed transaction, and we can actually see the proposed transaction in the proposal history; if we click on the proposal creation, we can actually see the exact parameters they used to make this proposal, just click "decode the input data" in etherscan. The way they are typically divided is they have list of addresses and a list of functions to call on those addresses, and the parameters to pass those addresses.
+
+So for example: A proposal can say "I would like to call `supportMarket(address)` on address <this-address>, and set reserve factor on <this-other-address>, <here> are the parameters & values we are going to pass" (parameters are encoded in bytes). Then also, there should be a description string of what this proposal is actually doing and why we are actually doing this.
+
+The reason we have to do this proposal governance process is that the contracts have access controls where the owner of the contracts is the one to call the two functions and the owner is the governance DAO.
+
+Once a proposal has been created, after a short delay, it becomes active, and this is when people can start voting on them. The delay between a proposal and an active vote can be changed or modified depending on your DAO. Then people have a set amount of time to vote on the proposal. If the proposal passes, it reaches succeeded status.
+
+If we go to the governance contract of the DAO, scroll down and click on "contract" and then "write as proxy", we can actually see the exact functions that people call to vote:
+    castVote:
+
+    castVoteBySignature:
+
+    castVoteWithReason:
+
+If we go to the compound app, click on vote, this is a user interface we can actually vote through to make it easier for non-tech-savvy users, so users can vote directly on the app.
+
+After a proposal passes, it goes into "queued" status, and there is a minimum delay between a proposal passing and a proposal being executed. Somebody has to call the "queued" function and it can only be called if the vote passes. The "queued" function/status says "the proposal has passed, it is now queued, and will be executed soon".
+
+Then after the proposal is queued after a certain amount of time, people can call the "executed" function to execute the passed proposal.
+
+This is a full example of the life cycle of a proposal going through this process.
+
+If a proposal vote fails, it stops right after it fails the vote.
+
+
+### Discussion Forum in DAOs
+
+Usually, just starting a proposal is not enough to garner votes for it. DAOs usually want a forum or sometype of discussion place to talk about these proposal and why you like them or don't like them. Oftentimes, a discourse is one of the main places that people are going to argue for why something is good or bad, so people can vote on the changes.
+
+`Snapshot.org` is a good tool DAOs use to figure out if the DAO community even wants something before it goes to vote. You can join snapshot group, and with the DAO tokens actually vote on things without them being executed just to get the sentiment. Some DAOs use this or even build their DAO in a way that helps the DAO with the voting process
+
+
+### Voting Mechanisms
+
+Voting in decentralized governance is critical to DAOs because sometimes they need to update and change to keep with the times.
+
+Not all protocols need to have a DAO, but those that do need a DAO need a way for the particapants to engage. DAO Users need to know how to particapte and engage in the DAO to help make decisions. - This is a tricky problem to solve:
+
+    Methods: 
+
+        Use an ERC20/NFT as voting power: 
+            In compound, users use the  Comp token to vote for different proposals. This runs the risk of being less fair, because when you tokenize the voting power, you're essentially auctioning off the voting power to the richest person/people; whoever has the most money gets to pick the changes. So if its only the rich people that get to vote, then its highly likely that all the changes in the protocol are going to benefit the rich - which is not an improvement over our current web2 world.
+
+            If a user buys a bunch of votes, make bad/malicious decisions, and then sells all his votes, the user as an individual does not get punished, he just punishes the group as a whole. 
+
+        Skin in the Game:
+            Whenever a user makes a decision, the vote is recorded. And if the decision leads to a bad outcome, you get punished for making evil or bad decisions for your DAO/protocol. This stops malicious evil users as they are held accountable for their decisions.
+
+            The hardest part about this is how a community decides what is a bad outcome and how do we punish malicious users?
+
+        Proof of Personhood or Participation:
+            Image that all users of the compound protocol were given a single vote simply because they used the protocol. Even if they had a thousand wallets, one human being = 1 vote. This would be a fair implementation where votes couldn't actually just be bought. 
+            
+            The issue is "Sybil resistance", how can we be sure that it's one vote equal one participant and not one participant pretending to be thousands of different people so they get more votes? This method has not been solved yet. This most likely will be solved soon with some type of chainlink integration because proof of personhood is basically just off-chain data that can be delievered on-chain, and that's exactly where chainlink shines.
+
+        And more! Can you think of more Voting methods?!
+
+#### Implementation of Voting
+
+On-chain Voting:
+    Example: Compound Finance
+    On-Chain smart contracts, voters call some type of vote functions with their wallet, send the transaction, and done! 
+
+    The problem with this is that if gas is expensive. If you have 10,000 people, and it is $100 per vote, you are costing your community $1,000,000 everytime you want to change anything, This is not sustainable.
+
+    Pro: the architecture is easy and everything is transparent and everything is on-chain
+
+    Con: Very expensive for users/voters.
+
+    Could `Governer C` be the a fix or the beginning of the fix? Governer C uses random samping to do some quadratic voting to help reduce costs while increasing civil resistance.
+
+Off-Chain Voting:
+    You can vote off-chain and still have it be 100% decentralized. You can sign a transaction and sign a vote without actually sending to a blockchain, thereforespending NO gas. Users can send the signed transaction to a decentralized database like IPFS, count all the votes in IPFS, and when the time comes, deliver the result of that data through something like an Oracle, like chainlink, to the blockchain, all in a single transaction!
+
+    Then if you wanted, you can replay all these side transactions in a single transaction to save gas. This can reduce the voting costs by up to 99%. Right now, this is an implementation, and one of the most popular ways to do this is through `SnapShot.org`.
+
+    This off-chain voting mechanism sames a ton of gas to the community and can be a more efficient way to store these transactions anyways, however it needs to be implemented very carefully. If you run youre entire DAO through a centralized oracle, you are introducing a centralized intermediary and ruining the decentralization aspect of your application, so do not use a centralized oracle.
+
+
+### Tools
+
+#### No Code Solutions to build DAOs
+
+- DAO stack
+- Eragon
+- Colony
+- DAO House
+
+are all alternatives that can actually help you with the dev side of running a DAO and building a DAO.
+
+However, if you want more granular control and you do not want to have to pay any of the fees associated with these protocols, you might want to do it from scratch:
+
+#### Dev Tools to build DAOs
+
+- `snapshot.org` is one of the most popular tools out there for both getting the sentiment of the DAO and actually performing that execution. Users can vote through this protocol with their actual tokens, the transactions get stored in IPFS, but none of it actually gets executed unless the DAO chooses to. This is a great way to get a feel of what your DAO wants to do, and you can send transactions and execute votes as well.
+
+- zodiac: Suite of DAO-based tools for you to implement into your DAOs as well.
+
+- Tally: another UI that allows people to see, vote, and interact with smart contracts through user interface.
+
+- Gnosis Safe: Multi-sig wallet, kind of a centrality component, but is on this list because most DAOs in the beginning are probably going to start with some type of centrality. It is must easier to be fast when you don't have thousands of people to wait for a vote. And in the beginning, any protocol is going to be centralized to some degree anyways. Using a multi-sig where voting happens through only a few key members can be "good" in the beginning for your DAO to build faster and often emergencies as well.
+
+Keep in mind that when adding any of these above, you are adding a level of of centrality.
+
+- Openzeppelin contracts: These are the contracts that we're going to be basing our DAO code along on.
+
+### Legality
+
+The future of DAOs is interesting for all these reasons we just above, but especially on a legal front. 
+
+Does it make sense for a DAO to live by the same regulation as another company?
+
+How would you even force a DAO to do something? You'd have to force all users to vote a certain way if the government tells you something... it's not clear on the future of DAOs in the regulation aspect.
+
+it's hard to tell who is even accountable for DAOs.
+
+In the United States, you can actually form a DAO and have it legally recognized in the state of Wyoming.
 
 
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
